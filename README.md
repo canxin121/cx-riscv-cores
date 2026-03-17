@@ -76,12 +76,95 @@ export CX_OUT_DIR="$PWD/artifacts"
 
 ## 依赖说明（简述）
 
-不同核的构建依赖不同，常见包括：
+> 说明：这里列的是**用于运行各子仓库 `build.sh` 的依赖**（主要是 Verilator 仿真器/emu 产物）。
+> 不包含“跑完整回归/跑 FPGA/跑 Linux 镜像”等更重的上游依赖集合。
 
-- `verilator`
-- `cmake` / `ninja`
-- `python3`（`ibex` 会创建 venv 并安装依赖）
-- `java17` / `sbt`（`VexRiscv`）
-- `mill` / `firtool`（`rocket-chip`）
+### 版本基线（本仓库开发机已验证）
+
+下面这些版本组合在本机上跑通过（仅供你对齐环境时参考）：
+
+- OS：Ubuntu 24.04（x86_64）
+- `git` 2.43.0
+- `bash` 5.2.21
+- `make` 4.3
+- `gcc/g++` 13.3.0
+- `clang/clang++` 18.1.3
+- `cmake` 3.28.3
+- `ninja` 1.11.1
+- `python3` 3.12.3
+- `java` OpenJDK 21.0.10
+- `verilator` 5.040
+- `mill` 0.11.13
+- `firtool` (CIRCT) 1.56.1（LLVM 18）
+- RISC-V toolchain（用于部分 repo）：`riscv64-unknown-elf-gcc` 15.1.0
+
+### 通用依赖（所有/大部分 core 都会用到）
+
+- `git`（建议 ≥ 2.25）：用于 clone / submodule / fetch
+- `bash`（建议 ≥ 4.0）：构建脚本
+- C/C++ 构建工具链：`make` + `gcc/g++`（或等价 clang）
+- `verilator`：多个 core 都是 Verilator 仿真可执行体
+  - 若要用 `--coverage` / `--coverage-light`，需要 Verilator 启用 coverage 支持并支持对应参数
+- 足够的磁盘/内存：`--matrix all` 会拉起多个重编译，缓存（Scala/Coursier、Verilator obj）会占用较多空间
+
+### 各实现依赖（按 core 拆分）
+
+#### `picorv32`
+
+- 依赖：`verilator`、`make`、`g++`
+- 备注：仅支持 `--isa rv32`
+
+#### `kronos`
+
+- 依赖：`cmake`（脚本中声明需要 ≥ 3.10）、`verilator`、`make`、`g++`
+- 额外：RISC-V GCC toolchain（至少要有其一）
+  - `riscv32-unknown-elf-gcc` 或 `riscv64-unknown-elf-gcc`
+  - 仅安装了 `riscv64-unknown-elf-*` 时，脚本会在 build 目录创建 `riscv32-unknown-elf-*` 的 shim
+
+#### `ibex`
+
+- 依赖：`python3`（含 `venv`）、`pip`、`verilator`、`make`、`g++`
+- Python 包：脚本会创建 `./.venv`，并安装 `python-requirements.txt` 中的依赖
+  - 其中 `fusesoc == 2.4.3` 是显式 pin 的版本（见 `ibex/python-requirements.txt`）
+- 备注：首次构建可能会用到网络（pip 下载依赖）
+
+#### `VexRiscv`
+
+- 依赖：`java`（建议用 JDK 17+；本机用 JDK 21 验证）、`verilator`、`make`、`g++`
+- Scala/SBT：
+  - repo pin 的 sbt 版本：`sbt.version=1.6.0`（见 `VexRiscv/project/build.properties`）
+  - `build.sh` 默认会下载一个 `sbt-extras` wrapper 到 `./.sbtw`（需要 `curl` + 网络），并通过 Maven 拉依赖（需要网络）
+
+#### `cva6`
+
+- 依赖：`verilator`、`make`、`g++`
+- 备注：上游 README 里有更完整的 toolchain/Spike/Verilator 固定版本流程；我们这里的 `build.sh` 只覆盖“生成可执行仿真器”这条轻量路径
+
+#### `rocket-chip`
+
+- 依赖：`mill`、`java`、`verilator`、`firtool`、`cmake`、`ninja`、`clang/clang++`
+  - `mill`：上游 README 的 BSP 示例里出现过 `millVersion: 0.10.9`；本机用 `mill 0.11.13` 验证通过
+  - `verilator`：本机用 5.040 验证；仓库内 `verilator.hash` 记录了 `4.226`（用于 Nix 环境 pin）
+  - `firtool`：需要 CIRCT 的 `firtool`（本机 `firtool-1.56.1`）
+- 环境变量：需要能找到 `fesvr` 头文件/库（脚本提示 `RISCV` 或 `SPIKE_ROOT`）
+- 备注：这是最“重”的一类构建；建议预留较长时间和足够磁盘
+
+#### `XiangShan`
+
+- 依赖：`mill`、`java`、`verilator`、`make`、`g++`
+  - `mill`：仓库内有 `.mill-version`，当前为 `0.12.15`（建议安装/使用能尊重 `.mill-version` 的 mill launcher/wrapper）
+- 备注：首次构建会通过 Coursier 拉 Scala 依赖（需要网络）
+
+### 常用版本检查命令
+
+```bash
+verilator --version
+mill --version
+firtool --version | head -n 5
+java -version
+python3 --version
+cmake --version
+ninja --version
+```
 
 脚本不会帮你安装系统依赖，只会把每个子仓库的 `build.sh` 跑起来并统一归档产物。
