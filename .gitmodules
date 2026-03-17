@@ -1,0 +1,28 @@
+[submodule "cores/picorv32"]
+	path = cores/picorv32
+	url = https://github.com/HardwareFuzz/picorv32.git
+	branch = cx-build
+[submodule "cores/kronos"]
+	path = cores/kronos
+	url = https://github.com/HardwareFuzz/kronos.git
+	branch = cx-build
+[submodule "cores/ibex"]
+	path = cores/ibex
+	url = https://github.com/HardwareFuzz/ibex.git
+	branch = cx-build
+[submodule "cores/VexRiscv"]
+	path = cores/VexRiscv
+	url = https://github.com/HardwareFuzz/VexRiscv.git
+	branch = cx-build
+[submodule "cores/cva6"]
+	path = cores/cva6
+	url = https://github.com/HardwareFuzz/cva6.git
+	branch = cx-build
+[submodule "cores/rocket-chip"]
+	path = cores/rocket-chip
+	url = https://github.com/HardwareFuzz/rocket-chip.git
+	branch = cx-build
+[submodule "cores/XiangShan"]
+	path = cores/XiangShan
+	url = https://github.com/HardwareFuzz/XiangShan.git
+	branch = cx-build
