@@ -1,9 +1,9 @@
 # Local build outputs
 artifacts/
 logs/
+out/
 
 # Convenience / editor
 .DS_Store
 .idea/
 .vscode/
-
