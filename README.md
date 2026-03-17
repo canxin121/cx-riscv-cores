@@ -10,7 +10,7 @@
 - `VexRiscv`
 - `cva6`
 - `rocket-chip`
-- `XiangShan`（默认不构建；需要显式打开）
+- `XiangShan`
 
 ## Quick start
 
@@ -21,15 +21,16 @@ cd cx-riscv-cores
 # 统一输出目录（推荐）
 export CX_OUT_DIR="$PWD/artifacts"
 
-# 构建所有实现（默认：跳过香山）
+# 构建所有实现（默认包含香山；默认矩阵为 minimal）
 ./scripts/build_all.sh
 ```
 
 构建结束后，产物会在 `artifacts/` 下，命名规则统一为：
 
-`<core>_<isa>_<N>c[_cov|_cov_light]`
+`<core>_<isa>[_<tag>]_<N>c[_cov|_cov_light]`
 
 例如：`rocket-chip_rv64fd_2c`、`ibex_rv32imc_1c`、`cva6_rv32_1c`。
+香山会额外带可选的 `tag`（例如 `aligned/unaligned`）：`xiangshan_rv64_unaligned_1c`。
 
 ## 常用参数
 
@@ -43,6 +44,9 @@ export CX_OUT_DIR="$PWD/artifacts"
 # 同时构建 1 核 + 2 核（默认）
 ./scripts/build_all.sh --cores both
 
+# 构建“全组合矩阵”（所有 core 支持的 ISA / 香山 preset 组合）
+./scripts/build_all.sh --matrix all
+
 # 清理后构建
 ./scripts/build_all.sh --clean
 
@@ -53,11 +57,18 @@ export CX_OUT_DIR="$PWD/artifacts"
 ./scripts/build_all.sh --coverage
 ./scripts/build_all.sh --coverage-light
 
-# 包含香山（默认跳过）
-./scripts/build_all.sh --with-xiangshan
+# 跳过香山（默认构建）
+./scripts/build_all.sh --skip-xiangshan
 
 # 只构建某些 core（逗号分隔；大小写不敏感）
 ./scripts/build_all.sh --only picorv32,kronos,ibex,vexriscv
+
+# 只构建指定 ISA（支持 shell glob；注意要加引号）
+./scripts/build_all.sh --matrix all --isa rv64fd
+./scripts/build_all.sh --matrix all --isa 'rv32*'
+
+# 香山 preset 选择
+./scripts/build_all.sh --only xiangshan --xiangshan-preset both
 
 # 只打印将要执行的命令，不实际执行
 ./scripts/build_all.sh --dry-run
