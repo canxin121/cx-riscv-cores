@@ -35,10 +35,10 @@
 
 这对使用 `scripts/build_all.sh` 的影响是：
 
-- `--cores 1`：会把每个一级 submodule checkout 到 `origin/cx-build`
-- `--cores 2`：会把每个一级 submodule checkout 到 `origin/cx-2hart-build`
+- `--cores 1`：会把每个一级 submodule checkout 到 `cx-build`
+- `--cores 2`：会把每个一级 submodule checkout 到 `cx-2hart-build`
 - `--cores both`：会先跑 `cx-build`，再跑 `cx-2hart-build`，因此脚本结束后本地 submodule 工作树通常停在 `cx-2hart-build`
-- 脚本内部使用 `git checkout -B <branch> origin/<branch>`；如果 submodule 里有未提交修改且与切换冲突，构建会失败，需要先处理本地改动
+- 脚本默认使用 `--branch-source auto`：若 submodule 已存在同名本地 branch，就直接使用本地 branch；否则从 `origin/<branch>` 创建。若显式指定 `--branch-source origin`，则会强制重置到远端分支
 
 ## Quick start
 
@@ -68,6 +68,12 @@ export CX_OUT_DIR="$PWD/artifacts"
 
 # 只构建 2 核（cx-2hart-build）
 ./scripts/build_all.sh --cores 2
+
+# 优先使用 submodule 里的本地 branch（默认就是 auto）
+./scripts/build_all.sh --cores 2 --branch-source auto
+
+# 强制从 origin/<branch> 重置各 submodule 后再构建
+./scripts/build_all.sh --cores 2 --branch-source origin
 
 # 同时构建 1 核 + 2 核（默认）
 ./scripts/build_all.sh --cores both
@@ -101,6 +107,21 @@ export CX_OUT_DIR="$PWD/artifacts"
 # 只打印将要执行的命令，不实际执行
 ./scripts/build_all.sh --dry-run
 ```
+
+## Branch 解析规则
+
+顶层 `scripts/build_all.sh` 在进入每个 submodule 构建前，会切到对应目标分支：
+
+- `--cores 1` 对应 `cx-build`
+- `--cores 2` 对应 `cx-2hart-build`
+
+`--branch-source` 控制这个分支如何解析：
+
+- `auto`：如果 submodule 里已经有同名本地 branch，就直接使用本地 branch；否则从 `origin/<branch>` 建出来
+- `local`：行为与 `auto` 类似，但语义上强调“优先/依赖本地 branch”
+- `origin`：总是把本地 branch 重置到 `origin/<branch>`
+
+默认值是 `auto`。这使得在 superproject 里先合入本地修复后，可以直接从 `cx-riscv-cores` 顶层一键构建，而不会被脚本覆盖回远端旧分支。
 
 ## 依赖说明（简述）
 

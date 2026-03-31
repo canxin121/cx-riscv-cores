@@ -11,6 +11,11 @@ Options:
   --out-dir DIR         Unified output directory for final artifacts.
                         Default: $CX_OUT_DIR if set, else ./artifacts
   --log-dir DIR         Log directory (default: ./logs/<YYYYMMDD>)
+  --branch-source MODE  How to resolve target branches inside each submodule.
+                        Default: auto
+                        - auto: prefer an existing local branch; otherwise use origin/<branch>
+                        - local: require/use a local branch if it exists, else create it from origin/<branch>
+                        - origin: always reset local branch to origin/<branch>
   --cores <1|2|both>    Build 1-core, 2-core, or both (default: both)
   --matrix <minimal|all>
                         Variant matrix to build (default: minimal)
@@ -47,6 +52,7 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 OUT_DIR_OPT=""
 LOG_DIR_OPT=""
+BRANCH_SOURCE="${CX_BRANCH_SOURCE:-auto}" # auto|local|origin
 CORES_MODE="both" # 1|2|both
 MATRIX_MODE="minimal" # minimal|all
 ISA_FILTERS=()
@@ -72,6 +78,11 @@ while [[ $# -gt 0 ]]; do
       CORES_MODE="$2"; shift 2 ;;
     --cores=*)
       CORES_MODE="${1#*=}"; shift ;;
+    --branch-source)
+      [[ $# -ge 2 ]] || die "--branch-source requires a value"
+      BRANCH_SOURCE="${2,,}"; shift 2 ;;
+    --branch-source=*)
+      BRANCH_SOURCE="${1#*=}"; BRANCH_SOURCE="${BRANCH_SOURCE,,}"; shift ;;
     --only)
       [[ $# -ge 2 ]] || die "--only requires a value"
       ONLY_LIST="$2"; shift 2 ;;
@@ -122,6 +133,11 @@ case "${CORES_MODE}" in
   *) die "--cores must be one of: 1, 2, both (got: ${CORES_MODE})" ;;
 esac
 
+case "${BRANCH_SOURCE}" in
+  auto|local|origin) ;;
+  *) die "--branch-source must be one of: auto, local, origin (got: ${BRANCH_SOURCE})" ;;
+esac
+
 case "${MATRIX_MODE}" in
   minimal|all) ;;
   *) die "--matrix must be one of: minimal, all (got: ${MATRIX_MODE})" ;;
@@ -163,14 +179,63 @@ contains_core() {
 
 ensure_submodule() {
   local relpath="$1"
-  run git -C "${ROOT_DIR}" submodule update --init --recursive "${relpath}"
+  local repo_dir="${ROOT_DIR}/${relpath}"
+  if git -C "${repo_dir}" rev-parse --git-dir >/dev/null 2>&1; then
+    return 0
+  fi
+  run git -C "${ROOT_DIR}" submodule update --init "${relpath}"
 }
 
 checkout_branch() {
   local repo_dir="$1"
   local branch="$2"
-  run git -C "${repo_dir}" fetch origin --prune
-  run git -C "${repo_dir}" checkout -q -B "${branch}" "origin/${branch}"
+
+  local has_local=0
+  local has_remote=0
+  if git -C "${repo_dir}" rev-parse --verify --quiet "refs/heads/${branch}" >/dev/null; then
+    has_local=1
+  fi
+
+  case "${BRANCH_SOURCE}" in
+    auto)
+      if (( has_local )); then
+        run git -C "${repo_dir}" checkout -q "${branch}"
+      else
+        run git -C "${repo_dir}" fetch origin --prune
+        if git -C "${repo_dir}" rev-parse --verify --quiet "refs/remotes/origin/${branch}" >/dev/null; then
+          has_remote=1
+        fi
+        if (( has_remote )); then
+          run git -C "${repo_dir}" checkout -q -B "${branch}" "origin/${branch}"
+        else
+          die "${repo_dir}: missing branch '${branch}' locally and on origin"
+        fi
+      fi
+      ;;
+    local)
+      if (( has_local )); then
+        run git -C "${repo_dir}" checkout -q "${branch}"
+      else
+        run git -C "${repo_dir}" fetch origin --prune
+        if git -C "${repo_dir}" rev-parse --verify --quiet "refs/remotes/origin/${branch}" >/dev/null; then
+          has_remote=1
+        fi
+        if (( has_remote )); then
+          run git -C "${repo_dir}" checkout -q -B "${branch}" "origin/${branch}"
+        else
+          die "${repo_dir}: missing branch '${branch}' locally and on origin"
+        fi
+      fi
+      ;;
+    origin)
+      run git -C "${repo_dir}" fetch origin --prune
+      if git -C "${repo_dir}" rev-parse --verify --quiet "refs/remotes/origin/${branch}" >/dev/null; then
+        has_remote=1
+      fi
+      (( has_remote )) || die "${repo_dir}: missing origin/${branch}"
+      run git -C "${repo_dir}" checkout -q -B "${branch}" "origin/${branch}"
+      ;;
+  esac
 }
 
 cov_suffix() {
@@ -512,19 +577,34 @@ build_set() {
   local branch="$1"
   local cores="$2"
 
-  contains_core picorv32 && build_picorv32 "${branch}" "${cores}"
-  contains_core kronos && build_kronos "${branch}" "${cores}"
-  contains_core ibex && build_ibex "${branch}" "${cores}"
-  contains_core VexRiscv && build_vexriscv "${branch}" "${cores}"
-  contains_core cva6 && build_cva6 "${branch}" "${cores}"
-  contains_core rocket-chip && build_rocket_chip "${branch}" "${cores}"
+  if contains_core picorv32; then
+    build_picorv32 "${branch}" "${cores}"
+  fi
+  if contains_core kronos; then
+    build_kronos "${branch}" "${cores}"
+  fi
+  if contains_core ibex; then
+    build_ibex "${branch}" "${cores}"
+  fi
+  if contains_core VexRiscv; then
+    build_vexriscv "${branch}" "${cores}"
+  fi
+  if contains_core cva6; then
+    build_cva6 "${branch}" "${cores}"
+  fi
+  if contains_core rocket-chip; then
+    build_rocket_chip "${branch}" "${cores}"
+  fi
   if (( WITH_XIANGSHAN )); then
-    contains_core XiangShan && build_xiangshan "${branch}" "${cores}"
+    if contains_core XiangShan; then
+      build_xiangshan "${branch}" "${cores}"
+    fi
   fi
 }
 
 echo "OUT_DIR=${OUT_DIR}"
 echo "LOG_DIR=${LOG_DIR}"
+echo "BRANCH_SOURCE=${BRANCH_SOURCE}"
 echo "CORES=${CORES_MODE}"
 echo "MATRIX=${MATRIX_MODE}"
 echo "ONLY=${ONLY_LIST:-<all>}"
