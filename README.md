@@ -12,6 +12,34 @@
 - `rocket-chip`
 - `XiangShan`
 
+## Submodule 的 `cx-*` 分支设计
+
+这个仓库的一级 submodule 都来自 `HardwareFuzz/*` fork。顶层仓库负责 pin 每个 submodule 的具体 commit，保证 clone 后的状态可复现；而各 submodule 自身则约定维护一组配套的 `cx-*` 分支，用来承载不同阶段/目标的构建适配。
+
+约定中的三个核心分支是：
+
+- `cx-log`：最早的统一化/日志化基线，作为后续构建分支的共同祖先
+- `cx-build`：1 核构建分支，也是 `.gitmodules` 中为所有一级 submodule 配置的默认 `branch`
+- `cx-2hart-build`：2 核构建分支，供双核构建路径使用
+
+这套设计的含义是：
+
+- 顶层仓库的 submodule commit 才是“当前版本”的最终定义；`.gitmodules` 里的 `branch = cx-build` 只是默认远端跟踪分支，不代表仓库只支持 `cx-build`
+- `git submodule update --remote` 默认只会沿着 `cx-build` 前进，因此它适合更新 1 核默认基线，不适合作为“切到 2 核版本”的方法
+- 1 核/2 核的构建差异尽量收敛在各个 core 自己的 `cx-build` / `cx-2hart-build` 中，顶层脚本只负责统一 checkout、调用 `build.sh`、归档产物
+
+当前一级 submodule 的分支拓扑约定是：
+
+- `picorv32`、`kronos`、`ibex`、`VexRiscv`、`cva6`、`rocket-chip` 目前基本都是线性继承：`cx-log -> cx-build -> cx-2hart-build`
+- `XiangShan` 不是简单线性关系：`cx-log` 仍然是共同祖先，但 `cx-build` 和 `cx-2hart-build` 是从共享的 build 基线分叉出来的兄弟分支，而不是前者 fast-forward 到后者
+
+这对使用 `scripts/build_all.sh` 的影响是：
+
+- `--cores 1`：会把每个一级 submodule checkout 到 `origin/cx-build`
+- `--cores 2`：会把每个一级 submodule checkout 到 `origin/cx-2hart-build`
+- `--cores both`：会先跑 `cx-build`，再跑 `cx-2hart-build`，因此脚本结束后本地 submodule 工作树通常停在 `cx-2hart-build`
+- 脚本内部使用 `git checkout -B <branch> origin/<branch>`；如果 submodule 里有未提交修改且与切换冲突，构建会失败，需要先处理本地改动
+
 ## Quick start
 
 ```bash
