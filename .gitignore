@@ -2,6 +2,7 @@
 artifacts/
 logs/
 out/
+.worktrees/
 
 # Convenience / editor
 .DS_Store
