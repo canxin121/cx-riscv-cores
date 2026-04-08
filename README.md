@@ -46,7 +46,81 @@ xiangshan_difftest_rv64_2c_so   -> CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_2C_SO
 - `scripts/generate_env.sh` 会在 `artifacts/` 中没有 `spike` 文件时尝试从 `PATH` 解析 `spike`
 - 如果系统里没有 `spike`，这个变量不会被导出
 
+补充：
+
+- 用本仓库里的本地脚本时，`CX_RISCV_CORES_ROOT` 指向仓库根目录
+- 用下面的 release 安装脚本时，`CX_RISCV_CORES_ROOT` 指向安装根目录
+
+## 从 Release 直接安装
+
+如果你不想先 clone 仓库，而是想直接把 release 里的统一产物下载到本机并安装环境变量，可以直接用这个脚本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/HardwareFuzz/cx-riscv-cores/main/scripts/install_release.sh | bash
+```
+
+这条命令默认会做这些事：
+
+- 把 `dev-release` 的全部产物下载到 `~/.local/share/cx-riscv-cores/artifacts`
+- 生成 `~/.config/cx-riscv-cores/env.sh`
+- 更新 `~/.bashrc`
+- 更新 `~/.profile`
+- 如果存在 `~/.zshrc`，也会更新它
+
+常用例子：
+
+```bash
+# 下载全部 release 产物到自定义安装根目录
+curl -fsSL https://raw.githubusercontent.com/HardwareFuzz/cx-riscv-cores/main/scripts/install_release.sh | \
+  bash -s -- --dir /opt/cx-riscv-cores
+
+# 只下载部分产物到指定目录，并安装环境变量
+curl -fsSL https://raw.githubusercontent.com/HardwareFuzz/cx-riscv-cores/main/scripts/install_release.sh | \
+  bash -s -- --artifact-dir /data/cx-riscv-cores --only 'rocket-chip_*' --only 'xiangshan_*unaligned*'
+
+# 只下载，不修改 shell 启动文件
+curl -fsSL https://raw.githubusercontent.com/HardwareFuzz/cx-riscv-cores/main/scripts/install_release.sh | \
+  bash -s -- --artifact-dir /tmp/cx-riscv-cores --download-only
+```
+
+说明：
+
+- `--only` / `--skip` 使用 shell glob 匹配 release asset 名称，支持重复传入，也支持逗号分隔
+- `--artifact-dir` 表示文件直接下载到这个目录
+- `--dir` 表示安装根目录；产物会放在 `DIR/artifacts`
+- 脚本会校验 release manifest 里的 SHA-256，已有同校验和文件会直接复用，不重复下载
+- `curl | bash` 无法直接修改当前父 shell，所以脚本会安装 `env.sh` 并更新 shell 启动文件；当前会话如果要立刻生效，执行一次 `. ~/.config/cx-riscv-cores/env.sh`
+
 ## 顶层脚本
+
+### `scripts/install_release.sh`
+
+这是“无需 clone 仓库”的 release 安装入口，也支持直接在本仓库里执行。
+
+用法：
+
+```bash
+./scripts/install_release.sh
+./scripts/install_release.sh --dir /opt/cx-riscv-cores
+./scripts/install_release.sh --artifact-dir /data/cx-riscv-cores --only 'rocket-chip_*'
+./scripts/install_release.sh --list --only 'xiangshan_*'
+```
+
+参数如下：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--dir DIR` | `~/.local/share/cx-riscv-cores` | 安装根目录；默认下载到 `DIR/artifacts` |
+| `--artifact-dir DIR` | 跟随 `--dir` | 直接指定产物目录 |
+| `--env-file FILE` | `~/.config/cx-riscv-cores/env.sh` | 环境变量导出文件路径 |
+| `--release TAG` | `dev-release` | 目标 GitHub release tag |
+| `--repo OWNER/REPO` | `HardwareFuzz/cx-riscv-cores` | 目标 GitHub 仓库 |
+| `--only GLOB[,GLOB]` | 全部 | 只下载匹配的 release asset |
+| `--skip GLOB[,GLOB]` | 不跳过 | 跳过匹配的 release asset |
+| `--list` | 关闭 | 只列出匹配结果，不下载 |
+| `--download-only` | 关闭 | 只下载，不生成 `env.sh`，也不改 shell rc |
+| `--no-profile` | 关闭 | 生成 `env.sh`，但不修改 `~/.bashrc` / `~/.profile` / `~/.zshrc` |
+| `--help`, `-h` | 关闭 | 显示帮助 |
 
 ### `scripts/build_all.sh`
 
