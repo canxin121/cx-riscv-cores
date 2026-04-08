@@ -1,279 +1,328 @@
 # cx-riscv-cores
 
-这个仓库用于**统一收集** HardwareFuzz 组织下多个 RISC-V 核的 `cx-*` 分支，并提供**一键构建脚本**把所有构建产物归档到一个统一输出目录。
+`cx-riscv-cores` 是 HardwareFuzz 的统一 RISC-V core 构建仓库。
 
-目前纳入的实现（作为 submodule）：
+这个仓库只负责两件事：
 
-- `picorv32`
-- `kronos`
-- `ibex`
-- `VexRiscv`
-- `cva6`
-- `rocket-chip`
-- `XiangShan`
+- 构建、下载、上传各个 core 的 wrapper/runtime 产物
+- 生成并永久安装 `CX_RISCV_CORES_*` 环境变量
 
-## Submodule 的 `cx-*` 分支设计
+`riscv-fuzz-test` 已经不再维护自己的 `riscv_impls_bins/`、wrapper 下载脚本、wrapper 上传脚本或旧的 `RISCV_WRAPPER_*` 环境变量。现在唯一的 bin/runtime 来源就是这个仓库。
 
-这个仓库的一级 submodule 都来自 `HardwareFuzz/*` fork。顶层仓库负责 pin 每个 submodule 的具体 commit，保证 clone 后的状态可复现；而各 submodule 自身则约定维护一组配套的 `cx-*` 分支，用来承载不同阶段/目标的构建适配。
+## 这个仓库产出什么
 
-约定中的三个核心分支是：
+统一产物目录是 `artifacts/`，默认命名规则是：
 
-- `cx-log`：最早的统一化/日志化基线，作为后续构建分支的共同祖先
-- `cx-build`：1 核构建分支，也是 `.gitmodules` 中为所有一级 submodule 配置的默认 `branch`
-- `cx-2hart-build`：2 核构建分支，供双核构建路径使用
-
-这套设计的含义是：
-
-- 顶层仓库的 submodule commit 才是“当前版本”的最终定义；`.gitmodules` 里的 `branch = cx-build` 只是默认远端跟踪分支，不代表仓库只支持 `cx-build`
-- `git submodule update --remote` 默认只会沿着 `cx-build` 前进，因此它适合更新 1 核默认基线，不适合作为“切到 2 核版本”的方法
-- 1 核/2 核的构建差异尽量收敛在各个 core 自己的 `cx-build` / `cx-2hart-build` 中，顶层脚本只负责统一 checkout、调用 `build.sh`、归档产物
-
-当前一级 submodule 的分支拓扑约定是：
-
-- `picorv32`、`kronos`、`ibex`、`VexRiscv`、`cva6`、`rocket-chip` 目前基本都是线性继承：`cx-log -> cx-build -> cx-2hart-build`
-- `XiangShan` 不是简单线性关系：`cx-log` 仍然是共同祖先，但 `cx-build` 和 `cx-2hart-build` 是从共享的 build 基线分叉出来的兄弟分支，而不是前者 fast-forward 到后者
-
-这对使用 `scripts/build_all.sh` 的影响是：
-
-- `--cores 1`：会把每个一级 submodule checkout 到 `cx-build`
-- `--cores 2`：会把每个一级 submodule checkout 到 `cx-2hart-build`
-- `--cores both`：会先跑 `cx-build`，再跑 `cx-2hart-build`，因此脚本结束后本地 submodule 工作树通常停在 `cx-2hart-build`
-- 脚本默认使用 `--branch-source auto`：若 submodule 已存在同名本地 branch，就直接使用本地 branch；否则从 `origin/<branch>` 创建。若显式指定 `--branch-source origin`，则会强制重置到远端分支
-
-## Quick start
-
-```bash
-git clone --recurse-submodules https://github.com/HardwareFuzz/cx-riscv-cores.git
-cd cx-riscv-cores
-
-# 统一输出目录（推荐）
-export CX_OUT_DIR="$PWD/artifacts"
-
-# 构建所有实现（默认包含香山；默认矩阵为 minimal）
-./scripts/build_all.sh
-
-# 生成并永久安装环境变量
-./scripts/install_env.sh
-source ~/.bashrc
+```text
+<artifact basename> -> CX_RISCV_CORES_<UPPER_SNAKE_BASENAME>
 ```
-
-构建结束后，产物会在 `artifacts/` 下，命名规则统一为：
-
-`<core>_<isa>[_<tag>]_<N>c[_cov|_cov_light]`
-
-例如：`rocket-chip_rv64fd_2c`、`ibex_rv32imc_1c`、`cva6_rv32_1c`。
-香山会额外带可选的 `tag`（例如 `aligned/unaligned`）：`xiangshan_rv64_unaligned_1c`。
-
-此外，`build_all.sh` 还会把香山运行时依赖一起归档到 `artifacts/`：
-
-- `xiangshan_difftest_rv64_1c_so`
-- `xiangshan_difftest_rv64_2c_so`
-
-这样 fuzz / diff 消费侧只需要关心 `artifacts/` 这一处，不需要再单独扫 `ready-to-run/`。
-
-## 环境变量规范
-
-`cx-riscv-cores` 现在是 wrapper/runtime 路径的唯一来源。环境变量名直接从产物文件名派生：
-
-- 规则：`<artifact basename>` 转成大写，并把 `-` / `.` 替换成 `_`
-- 前缀：统一加 `CX_RISCV_CORES_`
 
 例如：
 
 - `cva6_rv32_1c` -> `CX_RISCV_CORES_CVA6_RV32_1C`
 - `rocket-chip_rv64fd_2c` -> `CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C`
-- `xiangshan_difftest_rv64_1c_so` -> `CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_1C_SO`
+- `xiangshan_difftest_rv64_2c_so` -> `CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_2C_SO`
 
-`./scripts/generate_env.sh` 会按这个规则输出当前仓库对应的 `export ...`；`./scripts/install_env.sh` 会把这些 export 永久安装到：
+除了 wrapper 二进制，这个仓库还会把香山运行时依赖一并放进 `artifacts/`：
 
-- `~/.config/cx-riscv-cores/env.sh`
-- `~/.bashrc`
-- `~/.profile`
-- `~/.zshrc`（如果该文件已存在）
+- `xiangshan_difftest_rv64_1c_so`
+- `xiangshan_difftest_rv64_2c_so`
 
-注意：
+这样消费侧只需要依赖一个目录，不需要再去单独扫描 `ready-to-run/`。
 
-- `CX_RISCV_CORES_SPIKE` 不来自本仓库构建，而是由 `install_env.sh` 在安装时从 `PATH` 中解析 `spike`
-- 如果 `spike` 不在 `PATH`，脚本会给出警告，并且不会导出 `CX_RISCV_CORES_SPIKE`
+## 快速开始：下载预构建 bin
 
-## Release / Download
+如果你只是想拿到当前 release 的可用 bin，这是推荐流程。
 
-`riscv-fuzz-test` 不再负责 wrapper bin 的上传/下载；统一改由本仓库管理。
-
-常用命令：
+### 1. 克隆仓库
 
 ```bash
-# 从当前仓库 artifacts/ 上传到 GitHub Release
-./scripts/upload_release_artifacts.sh
+git clone --recurse-submodules https://github.com/HardwareFuzz/cx-riscv-cores.git
+cd cx-riscv-cores
+```
 
-# 从 GitHub Release 下载所有产物到 artifacts/
+### 2. 准备 GitHub CLI
+
+下载 release 资产依赖 `gh`：
+
+```bash
+gh auth login
+gh auth status
+```
+
+### 3. 下载 release 里的所有产物
+
+```bash
 ./scripts/download_release_artifacts.sh
+```
 
-# 下载指定模式的产物
+默认会下载 `dev-release` 的全部资产到：
+
+- `./artifacts`
+
+如果你只想下载部分模式：
+
+```bash
 ./scripts/download_release_artifacts.sh 'rocket-chip_*' 'xiangshan_*'
 ```
 
-默认 release tag 是 `dev-release`，可通过环境变量覆写：
+如果你想改 release tag：
+
+```bash
+export CX_RISCV_CORES_RELEASE_TAG=my-tag
+./scripts/download_release_artifacts.sh
+```
+
+### 4. 永久安装环境变量
+
+```bash
+./scripts/install_env.sh
+source ~/.bashrc
+```
+
+这个脚本会：
+
+- 生成 `~/.config/cx-riscv-cores/env.sh`
+- 向 `~/.bashrc` 写入 source block
+- 向 `~/.profile` 写入 source block
+- 如果存在 `~/.zshrc`，也会写入 source block
+
+### 5. 验证环境变量
+
+```bash
+env | rg '^CX_RISCV_CORES_' | sed -n '1,40p'
+```
+
+你应该能看到类似：
+
+- `CX_RISCV_CORES_ARTIFACT_DIR=.../cx-riscv-cores/artifacts`
+- `CX_RISCV_CORES_CVA6_RV64_2C=.../artifacts/cva6_rv64_2c`
+- `CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C=.../artifacts/rocket-chip_rv64fd_2c`
+- `CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_2C_SO=.../artifacts/xiangshan_difftest_rv64_2c_so`
+
+## 快速开始：从源码构建 bin
+
+如果你不想下载 release，而是希望自己重建 wrapper，可以这样做。
+
+### 1. 克隆仓库
+
+```bash
+git clone --recurse-submodules https://github.com/HardwareFuzz/cx-riscv-cores.git
+cd cx-riscv-cores
+```
+
+### 2. 配置统一输出目录
+
+推荐显式设置 `CX_OUT_DIR`：
+
+```bash
+export CX_OUT_DIR="$PWD/artifacts"
+```
+
+### 3. 一键构建
+
+```bash
+./scripts/build_all.sh
+```
+
+脚本默认会：
+
+- 统一切换各 submodule 到对应的 `cx-*` 构建分支
+- 构建默认矩阵下的 1hart / 2hart wrapper
+- 自动把香山 difftest `.so` stage 到 `artifacts/`
+
+### 4. 永久安装环境变量
+
+```bash
+./scripts/install_env.sh
+source ~/.bashrc
+```
+
+## 环境变量模型
+
+这个仓库导出的环境变量有三类：
+
+- `CX_RISCV_CORES_ROOT`
+- `CX_RISCV_CORES_ARTIFACT_DIR`
+- `CX_RISCV_CORES_<ARTIFACT_NAME>`
+
+生成规则由 `./scripts/generate_env.sh` 实现。这个脚本本身不修改 shell 配置，只是把 `export ...` 打到 stdout：
+
+```bash
+./scripts/generate_env.sh
+./scripts/generate_env.sh --artifact-dir /abs/path/to/artifacts
+```
+
+如果你只想在当前 shell 临时生效：
+
+```bash
+source ~/.config/cx-riscv-cores/env.sh
+```
+
+如果你想改用别的产物目录：
+
+```bash
+./scripts/install_env.sh --artifact-dir /abs/path/to/artifacts
+source ~/.bashrc
+```
+
+注意：
+
+- 这里不保留任何 `RISCV_WRAPPER_*` 兼容
+- `CX_RISCV_CORES_SPIKE` 不由本仓库构建产出
+- `install_env.sh` / `generate_env.sh` 会尝试从 `PATH` 解析 `spike`
+- 如果系统里没有 `spike`，这个变量不会被导出
+
+## 下载、上传、发布
+
+这个仓库是 release 资产的唯一管理入口。
+
+### 下载
+
+```bash
+./scripts/download_release_artifacts.sh
+./scripts/download_release_artifacts.sh 'ibex_*' 'kronos_*'
+```
+
+### 上传
+
+```bash
+./scripts/upload_release_artifacts.sh
+```
+
+上传脚本会：
+
+- 先把香山 runtime support stage 到 `artifacts/`
+- 计算每个资产的 sha256
+- 维护 `cx_riscv_cores_artifacts_manifest.json`
+- 只上传发生变化的文件
+
+可用的发布环境变量：
 
 - `CX_RISCV_CORES_RELEASE_TAG`
 - `CX_RISCV_CORES_RELEASE_TITLE`
 - `CX_RISCV_CORES_RELEASE_NOTES`
 - `CX_RISCV_CORES_RELEASE_MANIFEST`
 
-## 常用参数
+## 常用构建命令
+
+### 全量默认构建
 
 ```bash
-# 只构建 1 核（cx-build）
+./scripts/build_all.sh
+```
+
+### 只构建 1hart
+
+```bash
 ./scripts/build_all.sh --cores 1
+```
 
-# 只构建 2 核（cx-2hart-build）
+### 只构建 2hart
+
+```bash
 ./scripts/build_all.sh --cores 2
+```
 
-# 优先使用 submodule 里的本地 branch（默认就是 auto）
-./scripts/build_all.sh --cores 2 --branch-source auto
+### 同时构建 1hart 和 2hart
 
-# 强制从 origin/<branch> 重置各 submodule 后再构建
-./scripts/build_all.sh --cores 2 --branch-source origin
-
-# 同时构建 1 核 + 2 核（默认）
+```bash
 ./scripts/build_all.sh --cores both
+```
 
-# 构建“全组合矩阵”（所有 core 支持的 ISA / 香山 preset 组合）
-./scripts/build_all.sh --matrix all
+### 只构建部分 core
 
-# 清理后构建
-./scripts/build_all.sh --clean
+```bash
+./scripts/build_all.sh --only picorv32,kronos,ibex,vexriscv
+```
 
-# 指定输出目录（等价于设置 CX_OUT_DIR）
+### 只构建香山
+
+```bash
+./scripts/build_all.sh --only xiangshan --xiangshan-preset both
+```
+
+### 指定输出目录
+
+```bash
 ./scripts/build_all.sh --out-dir /abs/path/to/artifacts
+```
 
-# 开启覆盖率构建
+### 开启覆盖构建
+
+```bash
 ./scripts/build_all.sh --coverage
 ./scripts/build_all.sh --coverage-light
+```
 
-# 跳过香山（默认构建）
-./scripts/build_all.sh --skip-xiangshan
+### 只打印命令，不实际执行
 
-# 只构建某些 core（逗号分隔；大小写不敏感）
-./scripts/build_all.sh --only picorv32,kronos,ibex,vexriscv
-
-# 只构建指定 ISA（支持 shell glob；注意要加引号）
-./scripts/build_all.sh --matrix all --isa rv64fd
-./scripts/build_all.sh --matrix all --isa 'rv32*'
-
-# 香山 preset 选择
-./scripts/build_all.sh --only xiangshan --xiangshan-preset both
-
-# 只打印将要执行的命令，不实际执行
+```bash
 ./scripts/build_all.sh --dry-run
 ```
 
-## Branch 解析规则
+## 构建依赖
 
-顶层 `scripts/build_all.sh` 在进入每个 submodule 构建前，会切到对应目标分支：
+如果你只下载 release bin，可以只安装：
 
-- `--cores 1` 对应 `cx-build`
-- `--cores 2` 对应 `cx-2hart-build`
+- `git`
+- `gh`
+- `bash`
 
-`--branch-source` 控制这个分支如何解析：
+如果你要从源码完整构建，通常还需要：
 
-- `auto`：如果 submodule 里已经有同名本地 branch，就直接使用本地 branch；否则从 `origin/<branch>` 建出来
-- `local`：行为与 `auto` 类似，但语义上强调“优先/依赖本地 branch”
-- `origin`：总是把本地 branch 重置到 `origin/<branch>`
+- `make`
+- `gcc` / `g++`
+- `clang` / `clang++`
+- `cmake`
+- `ninja`
+- `python3`
+- `java`
+- `verilator`
+- `mill`
+- `firtool`
+- RISC-V toolchain
 
-默认值是 `auto`。这使得在 superproject 里先合入本地修复后，可以直接从 `cx-riscv-cores` 顶层一键构建，而不会被脚本覆盖回远端旧分支。
+不同 core 自身还可能带有额外依赖；顶层仓库只负责统一调度和产物归档。
 
-## 依赖说明（简述）
+## 故障排除
 
-> 说明：这里列的是**用于运行各子仓库 `build.sh` 的依赖**（主要是 Verilator 仿真器/emu 产物）。
-> 不包含“跑完整回归/跑 FPGA/跑 Linux 镜像”等更重的上游依赖集合。
+### 下载或构建后看不到新的环境变量
 
-### 版本基线（本仓库开发机已验证）
-
-下面这些版本组合在本机上跑通过（仅供你对齐环境时参考）：
-
-- OS：Ubuntu 24.04（x86_64）
-- `git` 2.43.0
-- `bash` 5.2.21
-- `make` 4.3
-- `gcc/g++` 13.3.0
-- `clang/clang++` 18.1.3
-- `cmake` 3.28.3
-- `ninja` 1.11.1
-- `python3` 3.12.3
-- `java` OpenJDK 21.0.10
-- `verilator` 5.040
-- `mill` 0.11.13
-- `firtool` (CIRCT) 1.56.1（LLVM 18）
-- RISC-V toolchain（用于部分 repo）：`riscv64-unknown-elf-gcc` 15.1.0
-
-### 通用依赖（所有/大部分 core 都会用到）
-
-- `git`（建议 ≥ 2.25）：用于 clone / submodule / fetch
-- `bash`（建议 ≥ 4.0）：构建脚本
-- C/C++ 构建工具链：`make` + `gcc/g++`（或等价 clang）
-- `verilator`：多个 core 都是 Verilator 仿真可执行体
-  - 若要用 `--coverage` / `--coverage-light`，需要 Verilator 启用 coverage 支持并支持对应参数
-- 足够的磁盘/内存：`--matrix all` 会拉起多个重编译，缓存（Scala/Coursier、Verilator obj）会占用较多空间
-
-### 各实现依赖（按 core 拆分）
-
-#### `picorv32`
-
-- 依赖：`verilator`、`make`、`g++`
-- 备注：仅支持 `--isa rv32`
-
-#### `kronos`
-
-- 依赖：`cmake`（脚本中声明需要 ≥ 3.10）、`verilator`、`make`、`g++`
-- 额外：RISC-V GCC toolchain（至少要有其一）
-  - `riscv32-unknown-elf-gcc` 或 `riscv64-unknown-elf-gcc`
-  - 仅安装了 `riscv64-unknown-elf-*` 时，脚本会在 build 目录创建 `riscv32-unknown-elf-*` 的 shim
-
-#### `ibex`
-
-- 依赖：`python3`（含 `venv`）、`pip`、`verilator`、`make`、`g++`
-- Python 包：脚本会创建 `./.venv`，并安装 `python-requirements.txt` 中的依赖
-  - 其中 `fusesoc == 2.4.3` 是显式 pin 的版本（见 `ibex/python-requirements.txt`）
-- 备注：首次构建可能会用到网络（pip 下载依赖）
-
-#### `VexRiscv`
-
-- 依赖：`java`（建议用 JDK 17+；本机用 JDK 21 验证）、`verilator`、`make`、`g++`
-- Scala/SBT：
-  - repo pin 的 sbt 版本：`sbt.version=1.6.0`（见 `VexRiscv/project/build.properties`）
-  - `build.sh` 默认会下载一个 `sbt-extras` wrapper 到 `./.sbtw`（需要 `curl` + 网络），并通过 Maven 拉依赖（需要网络）
-
-#### `cva6`
-
-- 依赖：`verilator`、`make`、`g++`
-- 备注：上游 README 里有更完整的 toolchain/Spike/Verilator 固定版本流程；我们这里的 `build.sh` 只覆盖“生成可执行仿真器”这条轻量路径
-
-#### `rocket-chip`
-
-- 依赖：`mill`、`java`、`verilator`、`firtool`、`cmake`、`ninja`、`clang/clang++`
-  - `mill`：上游 README 的 BSP 示例里出现过 `millVersion: 0.10.9`；本机用 `mill 0.11.13` 验证通过
-  - `verilator`：本机用 5.040 验证；仓库内 `verilator.hash` 记录了 `4.226`（用于 Nix 环境 pin）
-  - `firtool`：需要 CIRCT 的 `firtool`（本机 `firtool-1.56.1`）
-- 环境变量：需要能找到 `fesvr` 头文件/库（脚本提示 `RISCV` 或 `SPIKE_ROOT`）
-- 备注：这是最“重”的一类构建；建议预留较长时间和足够磁盘
-
-#### `XiangShan`
-
-- 依赖：`mill`、`java`、`verilator`、`make`、`g++`
-  - `mill`：仓库内有 `.mill-version`，当前为 `0.12.15`（建议安装/使用能尊重 `.mill-version` 的 mill launcher/wrapper）
-- 备注：首次构建会通过 Coursier 拉 Scala 依赖（需要网络）
-
-### 常用版本检查命令
+重新执行：
 
 ```bash
-verilator --version
-mill --version
-firtool --version | head -n 5
-java -version
-python3 --version
-cmake --version
-ninja --version
+./scripts/install_env.sh
+source ~/.bashrc
 ```
 
-脚本不会帮你安装系统依赖，只会把每个子仓库的 `build.sh` 跑起来并统一归档产物。
+### 仓库路径变了
+
+`install_env.sh` 生成的是绝对路径导出。只要你移动了仓库目录，就应该重新执行一次：
+
+```bash
+./scripts/install_env.sh
+source ~/.bashrc
+```
+
+### 想确认当前 shell 实际吃到的是哪个 env 文件
+
+```bash
+ls -l ~/.config/cx-riscv-cores/env.sh
+grep -n "cx-riscv-cores" ~/.bashrc ~/.profile ~/.zshrc 2>/dev/null
+```
+
+### `CX_RISCV_CORES_SPIKE` 没有出现
+
+先确认系统里有 `spike`：
+
+```bash
+command -v spike
+```
+
+如果没有，就先把 `spike` 装到 `PATH` 里，再重新执行：
+
+```bash
+./scripts/install_env.sh
+source ~/.bashrc
+```
