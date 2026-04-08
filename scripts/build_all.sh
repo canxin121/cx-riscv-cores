@@ -19,7 +19,7 @@ Options:
   --cores <1|2|both>    Build 1-core, 2-core, or both (default: both)
   --matrix <minimal|all>
                         Variant matrix to build (default: minimal)
-                        - minimal: fast defaults per core
+                        - minimal: all non-XiangShan ISA variants, plus XiangShan fast defaults
                         - all: build all supported ISA/preset combinations
   --isa PATTERN         Limit ISA tags to build. May be specified multiple times.
                         Supports shell globs (quote if needed), e.g. --isa 'rv32*'
@@ -29,10 +29,11 @@ Options:
   --with-xiangshan      (legacy) Include XiangShan (default: build)
   --xiangshan-preset <default|aligned|unaligned|both|all>
                         XiangShan preset selection (default: auto from --matrix)
-                        - default: no preset (TLConfig)
-                        - aligned / unaligned: build that preset only
+                        - default: legacy alias of unaligned
+                        - aligned: disable hardware misaligned load/store
+                        - unaligned: explicit unaligned build label
                         - both: aligned + unaligned
-                        - all: default + aligned + unaligned
+                        - all: legacy alias of both
   --clean               Forward --clean to sub-build scripts
   --coverage            Forward --coverage to sub-build scripts
   --coverage-light      Forward --coverage-light to sub-build scripts
@@ -353,11 +354,9 @@ xiangshan_presets() {
     mode="${MATRIX_MODE}"
   fi
   case "${mode}" in
-    minimal|default) printf '%s\n' default ;;
+    minimal|default|unaligned) printf '%s\n' unaligned ;;
     aligned) printf '%s\n' aligned ;;
-    unaligned) printf '%s\n' unaligned ;;
-    both) printf '%s\n' aligned unaligned ;;
-    all) printf '%s\n' default aligned unaligned ;;
+    both|all) printf '%s\n' aligned unaligned ;;
     *)
       die "internal: unexpected xiangshan preset mode '${mode}'"
       ;;
@@ -445,15 +444,10 @@ build_vexriscv() {
   local branch="$1"
   local cores="$2"
   local -a candidates=()
-  if [[ "${MATRIX_MODE}" == "all" || ${#ISA_FILTERS[@]} -gt 0 ]]; then
-    if [[ "${cores}" == "1" ]]; then
-      candidates=(rv32 rv32f rv32fd)
-    else
-      candidates=(rv32 rv32fd)
-    fi
+  if [[ "${cores}" == "1" ]]; then
+    candidates=(rv32 rv32f rv32fd)
   else
-    # Default to rv32fd for maximum feature coverage (and 2-core support).
-    candidates=(rv32fd)
+    candidates=(rv32 rv32fd)
   fi
 
   mapfile -t candidates < <(filter_isas VexRiscv "${candidates[@]}")
@@ -469,13 +463,7 @@ build_vexriscv() {
 build_cva6() {
   local branch="$1"
   local cores="$2"
-  local -a candidates=()
-  if [[ "${MATRIX_MODE}" == "all" || ${#ISA_FILTERS[@]} -gt 0 ]]; then
-    candidates=(rv64 rv32 rv32f)
-  else
-    # Default: build both rv64 and rv32 binaries.
-    candidates=(rv64 rv32)
-  fi
+  local -a candidates=(rv64 rv32 rv32f)
 
   mapfile -t candidates < <(filter_isas cva6 "${candidates[@]}")
   if (( ${#candidates[@]} == 0 )); then
@@ -494,13 +482,7 @@ build_cva6() {
 build_rocket_chip() {
   local branch="$1"
   local cores="$2"
-  local -a candidates=()
-  if [[ "${MATRIX_MODE}" == "all" || ${#ISA_FILTERS[@]} -gt 0 ]]; then
-    candidates=(rv64fd rv64f rv64 rv32fd rv32f rv32)
-  else
-    # Default: build both rv64fd and rv32 emulators.
-    candidates=(rv64fd rv32)
-  fi
+  local -a candidates=(rv64fd rv64f rv64 rv32fd rv32f rv32)
 
   mapfile -t candidates < <(filter_isas rocket-chip "${candidates[@]}")
   if (( ${#candidates[@]} == 0 )); then
@@ -536,23 +518,15 @@ build_xiangshan() {
   mapfile -t presets < <(xiangshan_presets)
   local cov_suf
   cov_suf="$(cov_suffix)"
+  local primary_isa="${isas[0]}"
 
   for preset in "${presets[@]}"; do
-    # Build XiangShan once per preset+core-count, then (optionally) duplicate the
-    # resulting binary under additional ISA tags. XiangShan's build.sh documents
-    # that --isa currently affects naming only.
-    local primary_isa="${isas[0]}"
-    local -a args=(--isa "${primary_isa}" --cores "${cores}")
-    local preset_tag=""
-    if [[ "${preset}" != "default" ]]; then
-      args+=(--preset "${preset}")
-      preset_tag="_${preset}"
-    fi
+    local -a args=(--isa "${primary_isa}" --cores "${cores}" --preset "${preset}")
+    local preset_tag="_${preset}"
 
     if (( CLEAN )); then
       for isa in "${isas[@]}"; do
-        local dst="${OUT_DIR}/xiangshan_${isa}${preset_tag}_${cores}c${cov_suf}"
-        run rm -f "${dst}"
+        run rm -f "${OUT_DIR}/xiangshan_${isa}${preset_tag}_${cores}c${cov_suf}"
       done
     fi
 

@@ -2,327 +2,327 @@
 
 `cx-riscv-cores` 是 HardwareFuzz 的统一 RISC-V core 构建仓库。
 
-这个仓库只负责两件事：
+这个仓库提供这些能力：
 
-- 构建、下载、上传各个 core 的 wrapper/runtime 产物
-- 生成并永久安装 `CX_RISCV_CORES_*` 环境变量
+- 从各个 core 子仓库构建统一命名的最终产物
+- 把所有最终产物集中放到一个目录，默认是 `./artifacts`
+- 把这些产物导出成稳定的 `CX_RISCV_CORES_*` 环境变量
 
-`riscv-fuzz-test` 已经不再维护自己的 `riscv_impls_bins/`、wrapper 下载脚本、wrapper 上传脚本或旧的 `RISCV_WRAPPER_*` 环境变量。现在唯一的 bin/runtime 来源就是这个仓库。
+文档中的统一接口就是 `CX_RISCV_CORES_*` 这组环境变量。
 
-## 这个仓库产出什么
+## 产物和变量规则
 
-统一产物目录是 `artifacts/`，默认命名规则是：
+- 默认产物目录：`./artifacts`
+- 默认日志目录：`./logs/<YYYYMMDD>`
+- build 产物命名规则：`<core>_<isa>[_<preset>]_<Nc>[_cov|_cov_light]`
+- 环境变量命名规则：`CX_RISCV_CORES_<UPPER_SNAKE_BASENAME>`
+
+例子：
 
 ```text
-<artifact basename> -> CX_RISCV_CORES_<UPPER_SNAKE_BASENAME>
+rocket-chip_rv64fd_2c           -> CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C
+rocket-chip_rv64fd_2c_cov       -> CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C_COV
+xiangshan_rv64_aligned_1c       -> CX_RISCV_CORES_XIANGSHAN_RV64_ALIGNED_1C
+xiangshan_difftest_rv64_2c_so   -> CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_2C_SO
 ```
 
-例如：
-
-- `cva6_rv32_1c` -> `CX_RISCV_CORES_CVA6_RV32_1C`
-- `rocket-chip_rv64fd_2c` -> `CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C`
-- `xiangshan_difftest_rv64_2c_so` -> `CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_2C_SO`
-
-除了 wrapper 二进制，这个仓库还会把香山运行时依赖一并放进 `artifacts/`：
-
-- `xiangshan_difftest_rv64_1c_so`
-- `xiangshan_difftest_rv64_2c_so`
-
-这样消费侧只需要依赖一个目录，不需要再去单独扫描 `ready-to-run/`。
-
-## 快速开始：下载预构建 bin
-
-如果你只是想拿到当前 release 的可用 bin，这是推荐流程。
-
-### 1. 克隆仓库
-
-```bash
-git clone --recurse-submodules https://github.com/HardwareFuzz/cx-riscv-cores.git
-cd cx-riscv-cores
-```
-
-### 2. 准备 GitHub CLI
-
-下载 release 资产依赖 `gh`：
-
-```bash
-gh auth login
-gh auth status
-```
-
-### 3. 下载 release 里的所有产物
-
-```bash
-./scripts/download_release_artifacts.sh
-```
-
-默认会下载 `dev-release` 的全部资产到：
-
-- `./artifacts`
-
-如果你只想下载部分模式：
-
-```bash
-./scripts/download_release_artifacts.sh 'rocket-chip_*' 'xiangshan_*'
-```
-
-如果你想改 release tag：
-
-```bash
-export CX_RISCV_CORES_RELEASE_TAG=my-tag
-./scripts/download_release_artifacts.sh
-```
-
-### 4. 永久安装环境变量
-
-```bash
-./scripts/install_env.sh
-source ~/.bashrc
-```
-
-这个脚本会：
-
-- 生成 `~/.config/cx-riscv-cores/env.sh`
-- 向 `~/.bashrc` 写入 source block
-- 向 `~/.profile` 写入 source block
-- 如果存在 `~/.zshrc`，也会写入 source block
-
-### 5. 验证环境变量
-
-```bash
-env | rg '^CX_RISCV_CORES_' | sed -n '1,40p'
-```
-
-你应该能看到类似：
-
-- `CX_RISCV_CORES_ARTIFACT_DIR=.../cx-riscv-cores/artifacts`
-- `CX_RISCV_CORES_CVA6_RV64_2C=.../artifacts/cva6_rv64_2c`
-- `CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C=.../artifacts/rocket-chip_rv64fd_2c`
-- `CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_2C_SO=.../artifacts/xiangshan_difftest_rv64_2c_so`
-
-## 快速开始：从源码构建 bin
-
-如果你不想下载 release，而是希望自己重建 wrapper，可以这样做。
-
-### 1. 克隆仓库
-
-```bash
-git clone --recurse-submodules https://github.com/HardwareFuzz/cx-riscv-cores.git
-cd cx-riscv-cores
-```
-
-### 2. 配置统一输出目录
-
-推荐显式设置 `CX_OUT_DIR`：
-
-```bash
-export CX_OUT_DIR="$PWD/artifacts"
-```
-
-### 3. 一键构建
-
-```bash
-./scripts/build_all.sh
-```
-
-脚本默认会：
-
-- 统一切换各 submodule 到对应的 `cx-*` 构建分支
-- 构建默认矩阵下的 1hart / 2hart wrapper
-- 自动把香山 difftest `.so` stage 到 `artifacts/`
-
-### 4. 永久安装环境变量
-
-```bash
-./scripts/install_env.sh
-source ~/.bashrc
-```
-
-## 环境变量模型
-
-这个仓库导出的环境变量有三类：
+固定环境变量有两个：
 
 - `CX_RISCV_CORES_ROOT`
 - `CX_RISCV_CORES_ARTIFACT_DIR`
-- `CX_RISCV_CORES_<ARTIFACT_NAME>`
 
-生成规则由 `./scripts/generate_env.sh` 实现。这个脚本本身不修改 shell 配置，只是把 `export ...` 打到 stdout：
+可选环境变量有一个：
+
+- `CX_RISCV_CORES_SPIKE`
+
+除了上面这些固定项，其他 `CX_RISCV_CORES_*` 都是从 `artifact-dir` 里当前实际存在的文件动态生成的：
+
+- 文件存在，就导出对应变量
+- 文件不存在，就不会导出对应变量
+
+说明：
+
+- `CX_RISCV_CORES_SPIKE` 由当前系统 `PATH` 中的 `spike` 推导出来
+- `scripts/generate_env.sh` 会在 `artifacts/` 中没有 `spike` 文件时尝试从 `PATH` 解析 `spike`
+- 如果系统里没有 `spike`，这个变量不会被导出
+
+## 顶层脚本
+
+### `scripts/build_all.sh`
+
+这是仓库的统一构建入口。
+
+默认行为：
+
+- 输出目录使用 `CX_OUT_DIR`，如果没设置则使用 `./artifacts`
+- 日志目录默认是 `./logs/<YYYYMMDD>`
+- `--cores both`
+- `--matrix minimal`
+- `--branch-source auto`
+- 默认启用 XiangShan
+- 默认不启用 coverage
+- 1-core 构建使用各子仓库的 `cx-build` 分支
+- 2-core 构建使用各子仓库的 `cx-2hart-build` 分支
+- 结束后会自动执行 `scripts/stage_runtime_support.sh`
+
+参数如下：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--out-dir DIR` | `CX_OUT_DIR` 或 `./artifacts` | 统一产物输出目录 |
+| `--log-dir DIR` | `./logs/<YYYYMMDD>` | 每个 core 的构建日志目录 |
+| `--branch-source <auto\|local\|origin>` | `auto` | 子仓库分支解析方式 |
+| `--cores <1\|2\|both>` | `both` | 构建 1-core、2-core 或两者都构建 |
+| `--matrix <minimal\|all>` | `minimal` | 选择默认矩阵或完整矩阵；除 XiangShan 外，其他 core 的 `minimal` 已覆盖全部支持 ISA 变体 |
+| `--isa PATTERN` | 不限制 | 只构建匹配的 ISA 标签；可重复传入，也支持逗号分隔和 shell glob |
+| `--only a,b,c` | 构建全部 | 只构建指定 core；支持 `picorv32,kronos,ibex,vexriscv,cva6,rocket-chip,xiangshan` |
+| `--skip-xiangshan` | 关闭 | 跳过 XiangShan |
+| `--with-xiangshan` | 开启 | 保留的兼容参数，效果等同默认行为 |
+| `--xiangshan-preset <default\|aligned\|unaligned\|both\|all>` | `auto` | XiangShan preset 选择；`auto` 会跟随 `--matrix`。发布产物只保留显式 `unaligned` / `aligned` 标签；`default` 是 `unaligned` 的兼容别名，`all` 是 `both` 的兼容别名 |
+| `--clean` | 关闭 | 把 `--clean` 透传到各子仓库 `build.sh` |
+| `--coverage` | 关闭 | 构建 `_cov` 版本 |
+| `--coverage-light` | 关闭 | 构建 `_cov_light` 版本 |
+| `--no-coverage` | 开启 | 显式指定无 coverage，默认就是这个行为 |
+| `--dry-run` | 关闭 | 只打印命令，不执行 |
+| `--help`, `-h` | 关闭 | 显示帮助 |
+
+最常用的命令：
+
+```bash
+# 默认最小矩阵，构建 1-core 和 2-core
+./scripts/build_all.sh
+
+# 只构建 1-core
+./scripts/build_all.sh --cores 1
+
+# 只构建部分 core
+./scripts/build_all.sh --only picorv32,ibex,vexriscv
+
+# 构建完整矩阵
+./scripts/build_all.sh --matrix all
+
+# 只构建 rocket-chip 的 rv64* 变体
+./scripts/build_all.sh --only rocket-chip --matrix all --isa 'rv64*'
+
+# 构建 XiangShan 的 aligned/unaligned 命名产物
+./scripts/build_all.sh --only xiangshan --matrix all --xiangshan-preset both
+
+# 构建 coverage 版本
+./scripts/build_all.sh --coverage
+```
+
+约束和注意事项：
+
+- `build_all.sh` 的 `1c` 和 `2c` 是通过切到 `cx-build` / `cx-2hart-build` 两个分支分别构建出来的
+- `picorv32` 和 `kronos` 的 `1c` / `2c` 能力就是这样拼出来的，不是单个分支同时支持两者
+- `ibex` 只支持 `rv32imc`
+- `vexriscv` 的 `2c` 不支持 `rv32f`
+- `cva6` 接受 `rv64fd` 作为过滤别名，但最终产物名仍然是 `cva6_rv64_*`
+- `xiangshan` 的 `--isa` 目前只影响产物命名，不改变 RTL/config
+
+### `scripts/generate_env.sh`
+
+这个脚本用于把环境变量导出语句打印到标准输出，不修改你的 shell 配置。
+
+用法：
 
 ```bash
 ./scripts/generate_env.sh
 ./scripts/generate_env.sh --artifact-dir /abs/path/to/artifacts
 ```
 
-如果你只想在当前 shell 临时生效：
+参数如下：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--artifact-dir DIR` | `CX_OUT_DIR` 或 `./artifacts` | 扫描这个目录并生成 `export ...` |
+| `--help`, `-h` | 关闭 | 显示帮助 |
+
+行为说明：
+
+- 只扫描 `artifact-dir` 目录下的一级文件
+- 会忽略 `*.json`
+- 扫描前会先执行一次 `scripts/stage_runtime_support.sh`
+
+### `scripts/install_env.sh`
+
+这个脚本会把 `generate_env.sh` 的输出安装成长期可用的 shell 环境。
+
+用法：
 
 ```bash
-source ~/.config/cx-riscv-cores/env.sh
-```
-
-如果你想改用别的产物目录：
-
-```bash
+./scripts/install_env.sh
 ./scripts/install_env.sh --artifact-dir /abs/path/to/artifacts
 source ~/.bashrc
 ```
 
-注意：
+参数如下：
 
-- 这里不保留任何 `RISCV_WRAPPER_*` 兼容
-- `CX_RISCV_CORES_SPIKE` 不由本仓库构建产出
-- `install_env.sh` / `generate_env.sh` 会尝试从 `PATH` 解析 `spike`
-- 如果系统里没有 `spike`，这个变量不会被导出
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `--artifact-dir DIR` | `CX_OUT_DIR` 或 `./artifacts` | 用这个目录生成最终的环境变量文件 |
+| `--help`, `-h` | 关闭 | 显示帮助 |
 
-## 下载、上传、发布
+执行后会做这些事：
 
-这个仓库是 release 资产的唯一管理入口。
+- 生成 `~/.config/cx-riscv-cores/env.sh`
+- 在 `~/.bashrc` 中插入 source block
+- 在 `~/.profile` 中插入 source block
+- 如果存在 `~/.zshrc`，也会插入 source block
 
-### 下载
+## `build_all.sh` 可生成的产物矩阵
 
-```bash
-./scripts/download_release_artifacts.sh
-./scripts/download_release_artifacts.sh 'ibex_*' 'kronos_*'
+下面的表列的是 `build_all.sh` 在不同选项下会生成到 `artifact-dir` 的基础 basename，不重复列 coverage 版本。
+
+这里描述的是“脚本可生成的文件集合”，不是“当前 `artifacts/` 目录此刻一定已经存在的文件集合”。
+
+表里的环境变量名也表示：
+
+- 当这个文件存在时，`generate_env.sh` 会导出这个变量名
+- 当这个文件不存在时，这个变量不会出现
+
+coverage 规则统一如下：
+
+- 任意可构建二进制都可以带 `_cov` 后缀，对应环境变量名追加 `_COV`
+- 任意可构建二进制都可以带 `_cov_light` 后缀，对应环境变量名追加 `_COV_LIGHT`
+- 运行时支持文件 `.so` 不存在 coverage 变体
+- 这些 coverage 文件只有在你真的执行过对应 coverage 构建后才会出现在 `artifact-dir`
+
+例子：
+
+```text
+ibex_rv32imc_2c_cov                   -> CX_RISCV_CORES_IBEX_RV32IMC_2C_COV
+xiangshan_rv64_unaligned_1c_cov_light -> CX_RISCV_CORES_XIANGSHAN_RV64_UNALIGNED_1C_COV_LIGHT
 ```
 
-### 上传
+表中的 `minimal` 表示默认 `./scripts/build_all.sh` 会生成的产物。
 
-```bash
-./scripts/upload_release_artifacts.sh
-```
+除了 XiangShan 仍然保留精简默认矩阵，其他 core 的 `minimal` 与 `all` 在产物集合上已经一致。
 
-上传脚本会：
+表中的 `all` 表示 `./scripts/build_all.sh --matrix all` 会生成的产物。
 
-- 先把香山 runtime support stage 到 `artifacts/`
-- 计算每个资产的 sha256
-- 维护 `cx_riscv_cores_artifacts_manifest.json`
-- 只上传发生变化的文件
+### 环境变量总览
 
-可用的发布环境变量：
+| 环境变量 | 含义 |
+| --- | --- |
+| `CX_RISCV_CORES_ROOT` | 本仓库根目录绝对路径 |
+| `CX_RISCV_CORES_ARTIFACT_DIR` | 当前使用的产物目录绝对路径 |
+| `CX_RISCV_CORES_SPIKE` | 可选；当 `spike` 可在 `PATH` 中找到时导出 |
 
-- `CX_RISCV_CORES_RELEASE_TAG`
-- `CX_RISCV_CORES_RELEASE_TITLE`
-- `CX_RISCV_CORES_RELEASE_NOTES`
-- `CX_RISCV_CORES_RELEASE_MANIFEST`
+### PicoRV32
 
-## 常用构建命令
+| Artifact basename | Env var | `minimal` | `all` | Notes |
+| --- | --- | --- | --- | --- |
+| `picorv32_rv32_1c` | `CX_RISCV_CORES_PICORV32_RV32_1C` | 是 | 是 | 来自 `cx-build` |
+| `picorv32_rv32_2c` | `CX_RISCV_CORES_PICORV32_RV32_2C` | 是 | 是 | 来自 `cx-2hart-build` |
 
-### 全量默认构建
+### Kronos
+
+| Artifact basename | Env var | `minimal` | `all` | Notes |
+| --- | --- | --- | --- | --- |
+| `kronos_rv32_1c` | `CX_RISCV_CORES_KRONOS_RV32_1C` | 是 | 是 | 来自 `cx-build` |
+| `kronos_rv32_2c` | `CX_RISCV_CORES_KRONOS_RV32_2C` | 是 | 是 | 来自 `cx-2hart-build` |
+
+### Ibex
+
+| Artifact basename | Env var | `minimal` | `all` | Notes |
+| --- | --- | --- | --- | --- |
+| `ibex_rv32imc_1c` | `CX_RISCV_CORES_IBEX_RV32IMC_1C` | 是 | 是 | 只支持 `rv32imc` |
+| `ibex_rv32imc_2c` | `CX_RISCV_CORES_IBEX_RV32IMC_2C` | 是 | 是 | 只支持 `rv32imc` |
+
+### VexRiscv
+
+| Artifact basename | Env var | `minimal` | `all` | Notes |
+| --- | --- | --- | --- | --- |
+| `vexriscv_rv32fd_1c` | `CX_RISCV_CORES_VEXRISCV_RV32FD_1C` | 是 | 是 | 默认 1-core 产物 |
+| `vexriscv_rv32_1c` | `CX_RISCV_CORES_VEXRISCV_RV32_1C` | 是 | 是 | 默认最小矩阵也会构建 |
+| `vexriscv_rv32f_1c` | `CX_RISCV_CORES_VEXRISCV_RV32F_1C` | 是 | 是 | 只支持 `1c` |
+| `vexriscv_rv32fd_2c` | `CX_RISCV_CORES_VEXRISCV_RV32FD_2C` | 是 | 是 | 默认 2-core 产物 |
+| `vexriscv_rv32_2c` | `CX_RISCV_CORES_VEXRISCV_RV32_2C` | 是 | 是 | `2c` 不支持 `rv32f` |
+
+### CVA6
+
+`cva6` 里 `rv64fd` 是 `rv64` 的过滤别名，但最终 basename 始终使用 `rv64`。
+
+| Artifact basename | Env var | `minimal` | `all` | Notes |
+| --- | --- | --- | --- | --- |
+| `cva6_rv64_1c` | `CX_RISCV_CORES_CVA6_RV64_1C` | 是 | 是 | 默认产物 |
+| `cva6_rv64_2c` | `CX_RISCV_CORES_CVA6_RV64_2C` | 是 | 是 | 默认产物 |
+| `cva6_rv32_1c` | `CX_RISCV_CORES_CVA6_RV32_1C` | 是 | 是 | 默认产物 |
+| `cva6_rv32_2c` | `CX_RISCV_CORES_CVA6_RV32_2C` | 是 | 是 | 默认产物 |
+| `cva6_rv32f_1c` | `CX_RISCV_CORES_CVA6_RV32F_1C` | 是 | 是 | 默认最小矩阵也会构建 |
+| `cva6_rv32f_2c` | `CX_RISCV_CORES_CVA6_RV32F_2C` | 是 | 是 | 默认最小矩阵也会构建 |
+
+### Rocket Chip
+
+| Artifact basename | Env var | `minimal` | `all` | Notes |
+| --- | --- | --- | --- | --- |
+| `rocket-chip_rv64fd_1c` | `CX_RISCV_CORES_ROCKET_CHIP_RV64FD_1C` | 是 | 是 | 默认产物 |
+| `rocket-chip_rv64fd_2c` | `CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C` | 是 | 是 | 默认产物 |
+| `rocket-chip_rv32_1c` | `CX_RISCV_CORES_ROCKET_CHIP_RV32_1C` | 是 | 是 | 默认产物 |
+| `rocket-chip_rv32_2c` | `CX_RISCV_CORES_ROCKET_CHIP_RV32_2C` | 是 | 是 | 默认产物 |
+| `rocket-chip_rv64f_1c` | `CX_RISCV_CORES_ROCKET_CHIP_RV64F_1C` | 是 | 是 | 默认最小矩阵也会构建 |
+| `rocket-chip_rv64f_2c` | `CX_RISCV_CORES_ROCKET_CHIP_RV64F_2C` | 是 | 是 | 默认最小矩阵也会构建 |
+| `rocket-chip_rv64_1c` | `CX_RISCV_CORES_ROCKET_CHIP_RV64_1C` | 是 | 是 | 默认最小矩阵也会构建 |
+| `rocket-chip_rv64_2c` | `CX_RISCV_CORES_ROCKET_CHIP_RV64_2C` | 是 | 是 | 默认最小矩阵也会构建 |
+| `rocket-chip_rv32fd_1c` | `CX_RISCV_CORES_ROCKET_CHIP_RV32FD_1C` | 是 | 是 | 默认最小矩阵也会构建 |
+| `rocket-chip_rv32fd_2c` | `CX_RISCV_CORES_ROCKET_CHIP_RV32FD_2C` | 是 | 是 | 默认最小矩阵也会构建 |
+| `rocket-chip_rv32f_1c` | `CX_RISCV_CORES_ROCKET_CHIP_RV32F_1C` | 是 | 是 | 默认最小矩阵也会构建 |
+| `rocket-chip_rv32f_2c` | `CX_RISCV_CORES_ROCKET_CHIP_RV32F_2C` | 是 | 是 | 默认最小矩阵也会构建 |
+
+### XiangShan
+
+`xiangshan` 的 `--isa` 目前只影响文件名，不改变实际 RTL/config。也就是说：
+
+- `xiangshan_rv64_*`
+- `xiangshan_rv64f_*`
+- `xiangshan_rv64fd_*`
+
+本质上是同一套 build 配置下的不同命名标签。
+
+更准确地说：
+
+- `rv64` 这组只发布 `unaligned` / `aligned` 两套显式标签；`default` 只是 `unaligned` 的兼容入口，不再单独产出无标签文件
+- `rv64f*` 和 `rv64fd*` 这些文件是 `build_all.sh` 在构建完成后通过 `cp -f` 复制出来的别名文件，不是额外的 RTL build
+- 当前源码里 `TLMinimalConfig` 默认就启用了硬件 misaligned load/store，所以 `default` 和 `unaligned` 在配置语义上等价；仓库现在统一只保留显式 `unaligned` 标签，避免重复和歧义
+
+| Artifact basename | Env var | `minimal` | `all` | Notes |
+| --- | --- | --- | --- | --- |
+| `xiangshan_rv64_aligned_1c` | `CX_RISCV_CORES_XIANGSHAN_RV64_ALIGNED_1C` | 否 | 是 | `aligned` preset，实际 build 输出 |
+| `xiangshan_rv64_aligned_2c` | `CX_RISCV_CORES_XIANGSHAN_RV64_ALIGNED_2C` | 否 | 是 | `aligned` preset，实际 build 输出 |
+| `xiangshan_rv64f_aligned_1c` | `CX_RISCV_CORES_XIANGSHAN_RV64F_ALIGNED_1C` | 否 | 是 | 由 `xiangshan_rv64_aligned_1c` 复制生成 |
+| `xiangshan_rv64f_aligned_2c` | `CX_RISCV_CORES_XIANGSHAN_RV64F_ALIGNED_2C` | 否 | 是 | 由 `xiangshan_rv64_aligned_2c` 复制生成 |
+| `xiangshan_rv64fd_aligned_1c` | `CX_RISCV_CORES_XIANGSHAN_RV64FD_ALIGNED_1C` | 否 | 是 | 由 `xiangshan_rv64_aligned_1c` 复制生成 |
+| `xiangshan_rv64fd_aligned_2c` | `CX_RISCV_CORES_XIANGSHAN_RV64FD_ALIGNED_2C` | 否 | 是 | 由 `xiangshan_rv64_aligned_2c` 复制生成 |
+| `xiangshan_rv64_unaligned_1c` | `CX_RISCV_CORES_XIANGSHAN_RV64_UNALIGNED_1C` | 是 | 是 | `unaligned` preset，实际 build 输出；这是默认最小矩阵下的 XiangShan 产物 |
+| `xiangshan_rv64_unaligned_2c` | `CX_RISCV_CORES_XIANGSHAN_RV64_UNALIGNED_2C` | 是 | 是 | `unaligned` preset，实际 build 输出；这是默认最小矩阵下的 XiangShan 产物 |
+| `xiangshan_rv64f_unaligned_1c` | `CX_RISCV_CORES_XIANGSHAN_RV64F_UNALIGNED_1C` | 否 | 是 | 由 `xiangshan_rv64_unaligned_1c` 复制生成 |
+| `xiangshan_rv64f_unaligned_2c` | `CX_RISCV_CORES_XIANGSHAN_RV64F_UNALIGNED_2C` | 否 | 是 | 由 `xiangshan_rv64_unaligned_2c` 复制生成 |
+| `xiangshan_rv64fd_unaligned_1c` | `CX_RISCV_CORES_XIANGSHAN_RV64FD_UNALIGNED_1C` | 否 | 是 | 由 `xiangshan_rv64_unaligned_1c` 复制生成 |
+| `xiangshan_rv64fd_unaligned_2c` | `CX_RISCV_CORES_XIANGSHAN_RV64FD_UNALIGNED_2C` | 否 | 是 | 由 `xiangshan_rv64_unaligned_2c` 复制生成 |
+
+### Runtime Support
+
+这两项不是 wrapper 可执行文件，而是 `scripts/stage_runtime_support.sh` 复制进统一产物目录的运行时依赖。
+
+| Artifact basename | Env var | `minimal` | `all` | Notes |
+| --- | --- | --- | --- | --- |
+| `xiangshan_difftest_rv64_1c_so` | `CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_1C_SO` | 是 | 是 | 来自 `cores/XiangShan/ready-to-run/riscv64-nemu-interpreter-so` |
+| `xiangshan_difftest_rv64_2c_so` | `CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_2C_SO` | 是 | 是 | 来自 `cores/XiangShan/ready-to-run/riscv64-nemu-interpreter-dual-so` |
+
+## 最小工作流
+
+如果你只需要本仓库的标准接口，流程就是这三步：
 
 ```bash
 ./scripts/build_all.sh
-```
-
-### 只构建 1hart
-
-```bash
-./scripts/build_all.sh --cores 1
-```
-
-### 只构建 2hart
-
-```bash
-./scripts/build_all.sh --cores 2
-```
-
-### 同时构建 1hart 和 2hart
-
-```bash
-./scripts/build_all.sh --cores both
-```
-
-### 只构建部分 core
-
-```bash
-./scripts/build_all.sh --only picorv32,kronos,ibex,vexriscv
-```
-
-### 只构建香山
-
-```bash
-./scripts/build_all.sh --only xiangshan --xiangshan-preset both
-```
-
-### 指定输出目录
-
-```bash
-./scripts/build_all.sh --out-dir /abs/path/to/artifacts
-```
-
-### 开启覆盖构建
-
-```bash
-./scripts/build_all.sh --coverage
-./scripts/build_all.sh --coverage-light
-```
-
-### 只打印命令，不实际执行
-
-```bash
-./scripts/build_all.sh --dry-run
-```
-
-## 构建依赖
-
-如果你只下载 release bin，可以只安装：
-
-- `git`
-- `gh`
-- `bash`
-
-如果你要从源码完整构建，通常还需要：
-
-- `make`
-- `gcc` / `g++`
-- `clang` / `clang++`
-- `cmake`
-- `ninja`
-- `python3`
-- `java`
-- `verilator`
-- `mill`
-- `firtool`
-- RISC-V toolchain
-
-不同 core 自身还可能带有额外依赖；顶层仓库只负责统一调度和产物归档。
-
-## 故障排除
-
-### 下载或构建后看不到新的环境变量
-
-重新执行：
-
-```bash
 ./scripts/install_env.sh
 source ~/.bashrc
 ```
 
-### 仓库路径变了
-
-`install_env.sh` 生成的是绝对路径导出。只要你移动了仓库目录，就应该重新执行一次：
+然后直接消费环境变量，例如：
 
 ```bash
-./scripts/install_env.sh
-source ~/.bashrc
-```
-
-### 想确认当前 shell 实际吃到的是哪个 env 文件
-
-```bash
-ls -l ~/.config/cx-riscv-cores/env.sh
-grep -n "cx-riscv-cores" ~/.bashrc ~/.profile ~/.zshrc 2>/dev/null
-```
-
-### `CX_RISCV_CORES_SPIKE` 没有出现
-
-先确认系统里有 `spike`：
-
-```bash
-command -v spike
-```
-
-如果没有，就先把 `spike` 装到 `PATH` 里，再重新执行：
-
-```bash
-./scripts/install_env.sh
-source ~/.bashrc
+echo "$CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C"
+echo "$CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_2C_SO"
 ```
