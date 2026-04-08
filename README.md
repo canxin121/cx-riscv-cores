@@ -51,6 +51,10 @@ export CX_OUT_DIR="$PWD/artifacts"
 
 # 构建所有实现（默认包含香山；默认矩阵为 minimal）
 ./scripts/build_all.sh
+
+# 生成并永久安装环境变量
+./scripts/install_env.sh
+source ~/.bashrc
 ```
 
 构建结束后，产物会在 `artifacts/` 下，命名规则统一为：
@@ -59,6 +63,62 @@ export CX_OUT_DIR="$PWD/artifacts"
 
 例如：`rocket-chip_rv64fd_2c`、`ibex_rv32imc_1c`、`cva6_rv32_1c`。
 香山会额外带可选的 `tag`（例如 `aligned/unaligned`）：`xiangshan_rv64_unaligned_1c`。
+
+此外，`build_all.sh` 还会把香山运行时依赖一起归档到 `artifacts/`：
+
+- `xiangshan_difftest_rv64_1c_so`
+- `xiangshan_difftest_rv64_2c_so`
+
+这样 fuzz / diff 消费侧只需要关心 `artifacts/` 这一处，不需要再单独扫 `ready-to-run/`。
+
+## 环境变量规范
+
+`cx-riscv-cores` 现在是 wrapper/runtime 路径的唯一来源。环境变量名直接从产物文件名派生：
+
+- 规则：`<artifact basename>` 转成大写，并把 `-` / `.` 替换成 `_`
+- 前缀：统一加 `CX_RISCV_CORES_`
+
+例如：
+
+- `cva6_rv32_1c` -> `CX_RISCV_CORES_CVA6_RV32_1C`
+- `rocket-chip_rv64fd_2c` -> `CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C`
+- `xiangshan_difftest_rv64_1c_so` -> `CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_1C_SO`
+
+`./scripts/generate_env.sh` 会按这个规则输出当前仓库对应的 `export ...`；`./scripts/install_env.sh` 会把这些 export 永久安装到：
+
+- `~/.config/cx-riscv-cores/env.sh`
+- `~/.bashrc`
+- `~/.profile`
+- `~/.zshrc`（如果该文件已存在）
+
+注意：
+
+- `CX_RISCV_CORES_SPIKE` 不来自本仓库构建，而是由 `install_env.sh` 在安装时从 `PATH` 中解析 `spike`
+- 如果 `spike` 不在 `PATH`，脚本会给出警告，并且不会导出 `CX_RISCV_CORES_SPIKE`
+
+## Release / Download
+
+`riscv-fuzz-test` 不再负责 wrapper bin 的上传/下载；统一改由本仓库管理。
+
+常用命令：
+
+```bash
+# 从当前仓库 artifacts/ 上传到 GitHub Release
+./scripts/upload_release_artifacts.sh
+
+# 从 GitHub Release 下载所有产物到 artifacts/
+./scripts/download_release_artifacts.sh
+
+# 下载指定模式的产物
+./scripts/download_release_artifacts.sh 'rocket-chip_*' 'xiangshan_*'
+```
+
+默认 release tag 是 `dev-release`，可通过环境变量覆写：
+
+- `CX_RISCV_CORES_RELEASE_TAG`
+- `CX_RISCV_CORES_RELEASE_TITLE`
+- `CX_RISCV_CORES_RELEASE_NOTES`
+- `CX_RISCV_CORES_RELEASE_MANIFEST`
 
 ## 常用参数
 

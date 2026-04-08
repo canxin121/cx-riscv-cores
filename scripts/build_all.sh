@@ -602,6 +602,15 @@ build_set() {
   fi
 }
 
+stage_runtime_support() {
+  local stage_script="${ROOT_DIR}/scripts/stage_runtime_support.sh"
+  if (( DRY_RUN )); then
+    echo "+ ${stage_script} --artifact-dir ${OUT_DIR}"
+    return 0
+  fi
+  "${stage_script}" --artifact-dir "${OUT_DIR}"
+}
+
 echo "OUT_DIR=${OUT_DIR}"
 echo "LOG_DIR=${LOG_DIR}"
 echo "BRANCH_SOURCE=${BRANCH_SOURCE}"
@@ -621,6 +630,8 @@ fi
 if [[ "${CORES_MODE}" == "2" || "${CORES_MODE}" == "both" ]]; then
   build_set "cx-2hart-build" "2"
 fi
+
+stage_runtime_support
 
 echo
 echo "Artifacts:"
