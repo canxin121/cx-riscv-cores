@@ -19,7 +19,7 @@ Why this exists:
 Environment overrides:
   GITHUB_REPO            Default: HardwareFuzz/cx-riscv-cores
   CURL_LOW_SPEED_BPS     Default: 10240   (10 KiB/s)
-  CURL_LOW_SPEED_TIME    Default: 120     (seconds)
+  CURL_LOW_SPEED_TIME    Default: 600     (seconds)
   CURL_CONNECT_TIMEOUT   Default: 15      (seconds)
   CURL_HTTP_VERSION      Default: --http1.1
   CURL_LIMIT_RATE        Optional. Example: 256k
@@ -36,7 +36,7 @@ FILE="$2"
 ASSET_NAME="${3:-$(basename "$FILE")}"
 REPO="${GITHUB_REPO:-HardwareFuzz/cx-riscv-cores}"
 LOW_SPEED_BPS="${CURL_LOW_SPEED_BPS:-10240}"
-LOW_SPEED_TIME="${CURL_LOW_SPEED_TIME:-120}"
+LOW_SPEED_TIME="${CURL_LOW_SPEED_TIME:-600}"
 CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-15}"
 HTTP_VERSION_FLAG="${CURL_HTTP_VERSION:---http1.1}"
 LIMIT_RATE="${CURL_LIMIT_RATE:-}"
@@ -59,6 +59,7 @@ UPLOAD_URL="https://uploads.github.com/repos/${REPO}/releases/${RELEASE_ID}/asse
 TOKEN="$(gh auth token)"
 TMP_RESP="$(mktemp)"
 FILE_SIZE="$(stat -c '%s' "$FILE")"
+ASSETS_API_PATH="repos/${REPO}/releases/${RELEASE_ID}/assets?per_page=100"
 
 cleanup() {
   rm -f "$TMP_RESP"
@@ -139,7 +140,7 @@ PY
 
   # If a partial temp asset somehow made it onto the release, remove it before retrying.
   partial_id="$(
-    gh api "repos/${REPO}/releases/${RELEASE_ID}/assets" \
+    gh api --paginate "${ASSETS_API_PATH}" \
       --jq ".[] | select(.name == \"${TMP_NAME}\") | .id" 2>/dev/null || true
   )"
   if [[ -n "${partial_id}" ]]; then
@@ -160,7 +161,7 @@ fi
 
 echo "[2/4] Query old asset"
 OLD_ASSET_ID="$(
-  gh api "repos/${REPO}/releases/${RELEASE_ID}/assets" \
+  gh api --paginate "${ASSETS_API_PATH}" \
     --jq ".[] | select(.name == \"${ASSET_NAME}\") | .id" 2>/dev/null || true
 )"
 
@@ -180,5 +181,5 @@ gh api \
   -f name="${ASSET_NAME}" >/dev/null
 
 echo "[4/4] Verify final asset"
-gh api "repos/${REPO}/releases/${RELEASE_ID}/assets" \
+gh api --paginate "${ASSETS_API_PATH}" \
   --jq ".[] | select(.name == \"${ASSET_NAME}\") | [.name, .updated_at, (.size|tostring), .browser_download_url] | @tsv"
