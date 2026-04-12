@@ -164,13 +164,17 @@ if [[ "${#artifacts_to_upload[@]}" -eq 0 ]]; then
   exit 0
 fi
 
+uploaded_names_path="${tmp_dir}/uploaded_names.txt"
+: > "${uploaded_names_path}"
+
 for path in "${artifacts_to_upload[@]}"; do
   echo "[upload] $(basename "${path}")"
   "${SAFE_UPLOAD_SCRIPT}" "${release_tag}" "${path}" "$(basename "${path}")"
+  printf '%s\n' "$(basename "${path}")" >> "${uploaded_names_path}"
 done
 gh release view "${release_tag}" --json assets > "${assets_json}"
 
-"${python_cmd}" - <<'PY' "${manifest_path}" "${assets_json}" "${updates_json}" "${manifest_name}"
+"${python_cmd}" - <<'PY' "${manifest_path}" "${assets_json}" "${updates_json}" "${manifest_name}" "${uploaded_names_path}"
 import json
 import sys
 
@@ -178,6 +182,11 @@ manifest_path = sys.argv[1]
 assets_info = json.load(open(sys.argv[2], encoding="utf-8"))
 updates = json.load(open(sys.argv[3], encoding="utf-8"))
 manifest_name = sys.argv[4]
+uploaded_names = {
+    line.strip()
+    for line in open(sys.argv[5], encoding="utf-8")
+    if line.strip()
+}
 
 try:
     existing = json.load(open(manifest_path, encoding="utf-8"))
@@ -186,7 +195,11 @@ except (FileNotFoundError, json.JSONDecodeError):
 
 assets = {a["name"]: a["id"] for a in assets_info.get("assets", []) if a.get("name") != manifest_name}
 manifest = {name: checksum for name, checksum in existing.items() if name in assets}
-manifest.update({name: checksum for name, checksum in updates.items() if name in assets})
+manifest.update({
+    name: updates[name]
+    for name in uploaded_names
+    if name in assets and name in updates
+})
 
 with open(manifest_path, "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2, sort_keys=True)
