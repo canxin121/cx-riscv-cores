@@ -26,6 +26,7 @@ Environment overrides:
   CURL_RESOLVE_ENTRY     Optional. Example: uploads.github.com:443:20.205.243.161
   UPLOAD_RETRIES         Default: 3
   UPLOAD_RETRY_DELAY     Default: 10      (seconds)
+  DELETE_RETRIES         Default: 3
 EOF
 }
 
@@ -43,6 +44,7 @@ LIMIT_RATE="${CURL_LIMIT_RATE:-}"
 RESOLVE_ENTRY="${CURL_RESOLVE_ENTRY:-}"
 UPLOAD_RETRIES="${UPLOAD_RETRIES:-3}"
 UPLOAD_RETRY_DELAY="${UPLOAD_RETRY_DELAY:-10}"
+DELETE_RETRIES="${DELETE_RETRIES:-3}"
 
 [[ -f "$FILE" ]] || { echo "ERROR: file not found: $FILE" >&2; exit 1; }
 command -v gh >/dev/null 2>&1 || { echo "ERROR: gh is required" >&2; exit 1; }
@@ -74,6 +76,7 @@ echo "low_speed=${LOW_SPEED_BPS}B/s for ${LOW_SPEED_TIME}s"
 [[ -n "${LIMIT_RATE}" ]] && echo "limit_rate=${LIMIT_RATE}"
 [[ -n "${RESOLVE_ENTRY}" ]] && echo "resolve=${RESOLVE_ENTRY}"
 echo "retries=${UPLOAD_RETRIES}"
+echo "delete_retries=${DELETE_RETRIES}"
 echo
 
 TMP_ASSET_ID=""
@@ -167,9 +170,24 @@ OLD_ASSET_ID="$(
 
 if [[ -n "${OLD_ASSET_ID}" ]]; then
   echo "Deleting old asset id=${OLD_ASSET_ID}"
-  gh api \
-    -X DELETE \
-    "repos/${REPO}/releases/assets/${OLD_ASSET_ID}" >/dev/null
+  delete_attempt=1
+  while true; do
+    if gh api \
+      -X DELETE \
+      "repos/${REPO}/releases/assets/${OLD_ASSET_ID}" >/dev/null
+    then
+      break
+    fi
+
+    if (( delete_attempt >= DELETE_RETRIES )); then
+      echo "ERROR: failed to delete old asset id=${OLD_ASSET_ID} after ${DELETE_RETRIES} attempt(s)" >&2
+      exit 1
+    fi
+
+    echo "WARNING: delete attempt ${delete_attempt}/${DELETE_RETRIES} failed for asset id=${OLD_ASSET_ID}; retrying in 3s..." >&2
+    delete_attempt=$((delete_attempt + 1))
+    sleep 3
+  done
 else
   echo "No existing asset named ${ASSET_NAME}"
 fi
