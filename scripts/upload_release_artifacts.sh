@@ -8,9 +8,15 @@ fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_DIR="${CX_OUT_DIR:-${ROOT_DIR}/artifacts}"
+SAFE_UPLOAD_SCRIPT="${ROOT_DIR}/scripts/upload_release_asset_safe.sh"
 
 if [[ ! -d "${ARTIFACT_DIR}" ]]; then
   echo "Error: artifact directory does not exist: ${ARTIFACT_DIR}" >&2
+  exit 1
+fi
+
+if [[ ! -x "${SAFE_UPLOAD_SCRIPT}" ]]; then
+  echo "Error: safe upload helper is missing or not executable: ${SAFE_UPLOAD_SCRIPT}" >&2
   exit 1
 fi
 
@@ -158,7 +164,10 @@ if [[ "${#artifacts_to_upload[@]}" -eq 0 ]]; then
   exit 0
 fi
 
-printf '%s\0' "${artifacts_to_upload[@]}" | xargs -0 -n50 gh release upload "${release_tag}" --clobber
+for path in "${artifacts_to_upload[@]}"; do
+  echo "[upload] $(basename "${path}")"
+  "${SAFE_UPLOAD_SCRIPT}" "${release_tag}" "${path}" "$(basename "${path}")"
+done
 gh release view "${release_tag}" --json assets > "${assets_json}"
 
 "${python_cmd}" - <<'PY' "${manifest_path}" "${assets_json}" "${updates_json}" "${manifest_name}"
@@ -183,5 +192,6 @@ with open(manifest_path, "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2, sort_keys=True)
 PY
 
-gh release upload "${release_tag}" "${manifest_path}" --clobber
+echo "[upload] ${manifest_name}"
+"${SAFE_UPLOAD_SCRIPT}" "${release_tag}" "${manifest_path}" "${manifest_name}"
 echo "Uploaded ${#artifacts_to_upload[@]} file(s) to release ${release_tag}."
