@@ -22,6 +22,7 @@
 ```text
 rocket-chip_rv64fd_2c           -> CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C
 rocket-chip_rv64fd_2c_cov       -> CX_RISCV_CORES_ROCKET_CHIP_RV64FD_2C_COV
+boom_rv64fd_2c                 -> CX_RISCV_CORES_BOOM_RV64FD_2C
 xiangshan_rv64_aligned_1c       -> CX_RISCV_CORES_XIANGSHAN_RV64_ALIGNED_1C
 xiangshan_difftest_rv64_2c_so   -> CX_RISCV_CORES_XIANGSHAN_DIFFTEST_RV64_2C_SO
 ```
@@ -149,7 +150,7 @@ curl -fsSL https://raw.githubusercontent.com/HardwareFuzz/cx-riscv-cores/main/sc
 | `--cores <1\|2\|both>` | `both` | 构建 1-core、2-core 或两者都构建 |
 | `--matrix <minimal\|all>` | `minimal` | 选择默认矩阵或完整矩阵；除 XiangShan 外，其他 core 的 `minimal` 已覆盖全部支持 ISA 变体 |
 | `--isa PATTERN` | 不限制 | 只构建匹配的 ISA 标签；可重复传入，也支持逗号分隔和 shell glob |
-| `--only a,b,c` | 构建全部 | 只构建指定 core；支持 `picorv32,kronos,ibex,vexriscv,cva6,rocket-chip,xiangshan` |
+| `--only a,b,c` | 构建全部 | 只构建指定 core；支持 `picorv32,kronos,ibex,vexriscv,cva6,rocket-chip,boom,xiangshan` |
 | `--skip-xiangshan` | 关闭 | 跳过 XiangShan |
 | `--with-xiangshan` | 开启 | 保留的兼容参数，效果等同默认行为 |
 | `--xiangshan-preset <default\|aligned\|unaligned\|both\|all>` | `auto` | XiangShan preset 选择；`auto` 会跟随 `--matrix`。发布产物只保留显式 `unaligned` / `aligned` 标签；`default` 是 `unaligned` 的兼容别名，`all` 是 `both` 的兼容别名 |
@@ -178,6 +179,9 @@ curl -fsSL https://raw.githubusercontent.com/HardwareFuzz/cx-riscv-cores/main/sc
 # 只构建 rocket-chip 的 rv64* 变体
 ./scripts/build_all.sh --only rocket-chip --matrix all --isa 'rv64*'
 
+# 只构建 BOOM 的默认 1-core / 2-core provider
+./scripts/build_all.sh --only boom
+
 # 构建 XiangShan 的 aligned/unaligned 命名产物
 ./scripts/build_all.sh --only xiangshan --matrix all --xiangshan-preset both
 
@@ -192,6 +196,8 @@ curl -fsSL https://raw.githubusercontent.com/HardwareFuzz/cx-riscv-cores/main/sc
 - `ibex` 只支持 `rv32imc`
 - `vexriscv` 的 `2c` 不支持 `rv32f`
 - `cva6` 接受 `rv64fd` 作为过滤别名，但最终产物名仍然是 `cva6_rv64_*`
+- `boom` 使用 `cores/boom` 里的 Chipyard `main` 分支，不跟随其他 core 的 `cx-build` / `cx-2hart-build` 分支约定
+- `boom` 当前只发布 `rv64fd` provider；默认 `1c` / `2c` 都使用 `small` 配置；如果你要切换成 `medium` / `large`，直接运行 `cores/boom/build.sh --variant ...`
 - `xiangshan` 的 `--isa` 目前只影响产物命名，不改变 RTL/config
 
 ### `scripts/generate_env.sh`
@@ -343,6 +349,19 @@ xiangshan_rv64_unaligned_1c_cov_light -> CX_RISCV_CORES_XIANGSHAN_RV64_UNALIGNED
 | `rocket-chip_rv32fd_2c` | `CX_RISCV_CORES_ROCKET_CHIP_RV32FD_2C` | 是 | 是 | 默认最小矩阵也会构建 |
 | `rocket-chip_rv32f_1c` | `CX_RISCV_CORES_ROCKET_CHIP_RV32F_1C` | 是 | 是 | 默认最小矩阵也会构建 |
 | `rocket-chip_rv32f_2c` | `CX_RISCV_CORES_ROCKET_CHIP_RV32F_2C` | 是 | 是 | 默认最小矩阵也会构建 |
+
+### BOOM
+
+`boom` 的默认 provider 基于 Chipyard BOOM V3 trace 配置：
+
+- `1c` 默认产物使用 `small` 变体
+- `2c` 默认产物使用 `small` 变体
+- `cores/boom/build.sh --variant small|medium|large` 可以额外构建带变体标签的 wrapper，例如 `boom_rv64fd_large_1c`
+
+| Artifact basename | Env var | `minimal` | `all` | Notes |
+| --- | --- | --- | --- | --- |
+| `boom_rv64fd_1c` | `CX_RISCV_CORES_BOOM_RV64FD_1C` | 是 | 是 | 默认单核 provider；底层配置是 `CXBoomSmallV3TraceConfig` |
+| `boom_rv64fd_2c` | `CX_RISCV_CORES_BOOM_RV64FD_2C` | 是 | 是 | 默认双核 provider；底层配置是 `CXBoomDualSmallV3TraceConfig` |
 
 ### XiangShan
 

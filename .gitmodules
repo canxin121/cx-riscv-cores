@@ -26,3 +26,7 @@
 	path = cores/XiangShan
 	url = https://github.com/HardwareFuzz/XiangShan.git
 	branch = cx-build
+[submodule "cores/boom"]
+	path = cores/boom
+	url = https://github.com/canxin121/chipyard.git
+	branch = cx-build
