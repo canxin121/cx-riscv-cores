@@ -24,7 +24,7 @@ Options:
   --isa PATTERN         Limit ISA tags to build. May be specified multiple times.
                         Supports shell globs (quote if needed), e.g. --isa 'rv32*'
   --only a,b,c          Only build selected cores (comma-separated, case-insensitive).
-                        Supported: picorv32,kronos,ibex,vexriscv,cva6,rocket-chip,xiangshan
+                        Supported: picorv32,kronos,ibex,vexriscv,cva6,rocket-chip,boom,xiangshan
   --skip-xiangshan      Skip XiangShan (default: build)
   --with-xiangshan      (legacy) Include XiangShan (default: build)
   --xiangshan-preset <default|aligned|unaligned|both|all>
@@ -498,6 +498,25 @@ build_rocket_chip() {
   build_in_repo rocket-chip "${branch}" "${args[@]}"
 }
 
+build_boom() {
+  local _branch="$1"
+  local cores="$2"
+  local -a candidates=(rv64fd)
+
+  mapfile -t candidates < <(filter_isas boom "${candidates[@]}")
+  if (( ${#candidates[@]} == 0 )); then
+    echo "[skip] boom: no ISA matches --isa filter"
+    return 0
+  fi
+
+  local -a args=()
+  for isa in "${candidates[@]}"; do
+    args+=(--isa "${isa}")
+  done
+  args+=(--cores "${cores}")
+  build_in_repo boom "main" "${args[@]}"
+}
+
 build_xiangshan() {
   local branch="$1"
   local cores="$2"
@@ -568,6 +587,9 @@ build_set() {
   fi
   if contains_core rocket-chip; then
     build_rocket_chip "${branch}" "${cores}"
+  fi
+  if contains_core boom; then
+    build_boom "${branch}" "${cores}"
   fi
   if (( WITH_XIANGSHAN )); then
     if contains_core XiangShan; then
