@@ -371,6 +371,7 @@ build_in_repo() {
 
   ensure_submodule "cores/${name}"
   checkout_branch "${repo_dir}" "${branch}"
+  run git -C "${repo_dir}" submodule update --init --recursive
 
   local build_cmd=("./build.sh")
   build_cmd+=("$@")
