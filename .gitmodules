@@ -28,5 +28,5 @@
 	branch = cx-build
 [submodule "cores/boom"]
 	path = cores/boom
-	url = https://github.com/canxin121/chipyard.git
-	branch = cx-build
+	url = https://github.com/HardwareFuzz/chipyard.git
+	branch = main

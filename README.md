@@ -133,7 +133,7 @@ curl -fsSL https://raw.githubusercontent.com/HardwareFuzz/cx-riscv-cores/main/sc
 - 日志目录默认是 `./logs/<YYYYMMDD>`
 - `--cores both`
 - `--matrix minimal`
-- `--branch-source auto`
+- `--branch-source origin`
 - 默认启用 XiangShan
 - 默认不启用 coverage
 - 1-core 构建使用各子仓库的 `cx-build` 分支
@@ -146,7 +146,7 @@ curl -fsSL https://raw.githubusercontent.com/HardwareFuzz/cx-riscv-cores/main/sc
 | --- | --- | --- |
 | `--out-dir DIR` | `CX_OUT_DIR` 或 `./artifacts` | 统一产物输出目录 |
 | `--log-dir DIR` | `./logs/<YYYYMMDD>` | 每个 core 的构建日志目录 |
-| `--branch-source <auto\|local\|origin>` | `auto` | 子仓库分支解析方式 |
+| `--branch-source <auto\|local\|origin>` | `origin` | 子仓库分支解析方式 |
 | `--cores <1\|2\|both>` | `both` | 构建 1-core、2-core 或两者都构建 |
 | `--matrix <minimal\|all>` | `minimal` | 选择默认矩阵或完整矩阵；除 XiangShan 外，其他 core 的 `minimal` 已覆盖全部支持 ISA 变体 |
 | `--isa PATTERN` | 不限制 | 只构建匹配的 ISA 标签；可重复传入，也支持逗号分隔和 shell glob |

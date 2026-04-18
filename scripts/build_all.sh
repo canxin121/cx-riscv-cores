@@ -12,7 +12,7 @@ Options:
                         Default: $CX_OUT_DIR if set, else ./artifacts
   --log-dir DIR         Log directory (default: ./logs/<YYYYMMDD>)
   --branch-source MODE  How to resolve target branches inside each submodule.
-                        Default: auto
+                        Default: origin
                         - auto: prefer an existing local branch; otherwise use origin/<branch>
                         - local: require/use a local branch if it exists, else create it from origin/<branch>
                         - origin: always reset local branch to origin/<branch>
@@ -53,7 +53,7 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 OUT_DIR_OPT=""
 LOG_DIR_OPT=""
-BRANCH_SOURCE="${CX_BRANCH_SOURCE:-auto}" # auto|local|origin
+BRANCH_SOURCE="${CX_BRANCH_SOURCE:-origin}" # auto|local|origin
 CORES_MODE="both" # 1|2|both
 MATRIX_MODE="minimal" # minimal|all
 ISA_FILTERS=()
